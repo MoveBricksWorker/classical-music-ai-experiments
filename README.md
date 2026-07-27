@@ -86,7 +86,7 @@ python train_big.py --model melody --epochs 80 --batch 32
 ```
 
 - **和声标注**：DeepSeek V4 Flash 从结构化乐谱 JSON 一步产出完整和声分析（461首，31651和弦）
-- **旋律标注**：阿里云百炼免费 API（Qwen 模型轮换），28912 旋律音，8 种角色分类
+- **旋律标注**：同样使用DeepSeek V4 Flash
 
 ## 模型演进
 
