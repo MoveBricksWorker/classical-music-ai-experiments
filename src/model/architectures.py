@@ -79,13 +79,27 @@ def chord_name_to_info(cn: str) -> tuple[int, str]:
     # 防御：拒绝特殊令牌
     if cn.startswith('<') or cn in ('', '?'):
         return 0, 'M'
-    for k, v in [('viio', 11), ('vii', 11), ('vi', 9), ('v', 7),
-                  ('iv', 5), ('iii', 4), ('iio', 2), ('ii', 2), ('i', 0)]:
-        if cn.lower().startswith(k):
-            r = v
-            break
+    # 复合级数 X/Y (次属和弦等): 根音 = root(X) + root(Y) (在 C 大调级数上复合)
+    DEGREE_ROOT = {'vii': 11, 'vii°': 11, 'vi': 9, 'v': 7, 'iv': 5, 'iii': 4,
+                   'ii': 2, 'i': 0}
+    if '/' in cn:
+        head, _, tail = cn.partition('/')
+        # 去掉 figure (如 V6/5, I6/4): 取字母部分
+        def _degree_root(name):
+            nl = name.lower().rstrip('0123456789')
+            for k in ['vii', 'vi', 'v', 'iv', 'iii', 'ii', 'i']:
+                if nl.startswith(k):
+                    return DEGREE_ROOT[k]
+            return 0
+        r = (_degree_root(head) + _degree_root(tail)) % 12
     else:
-        r = 0
+        for k, v in [('viio', 11), ('vii', 11), ('vi', 9), ('v', 7),
+                      ('iv', 5), ('iii', 4), ('iio', 2), ('ii', 2), ('i', 0)]:
+            if cn.lower().startswith(k):
+                r = v
+                break
+        else:
+            r = 0
     nl = cn.lower()
     if 'o' in nl and '7' in nl:
         t = 'dim7'
