@@ -1,0 +1,269 @@
+{
+  "generated_at": "2026-09-11 17:11:13",
+  "config": {
+    "n": 60,
+    "steps": 16,
+    "temp": 1.0,
+    "remask": 6,
+    "sampler": "maskgit",
+    "scorer": true,
+    "pt": "melody_diffusion_v7_phrase.pt",
+    "d": 288,
+    "layers": 8,
+    "beat": false,
+    "block_conds": true,
+    "struct": true,
+    "phrase": true,
+    "rope": true,
+    "heads": 8,
+    "baseline_pt": "melody_model_cloud_v4.pt",
+    "device": ""
+  },
+  "device": "cuda",
+  "corpus": {
+    "n_pieces": 370,
+    "theory": {
+      "n_pieces": 370,
+      "key": {
+        "mean": 0.7419292117520402,
+        "std": 0.10186206504238739,
+        "n": 370,
+        "mode": "A minor"
+      },
+      "smoothness": {
+        "avg_interval": {
+          "mean": 1.7704901821303074,
+          "std": 0.3004508705266234,
+          "n": 370
+        },
+        "step_ratio": {
+          "mean": 0.8574032023629644,
+          "std": 0.08816837920900113,
+          "n": 370
+        },
+        "direction_change_rate": {
+          "mean": 0.3955019985692878,
+          "std": 0.12933229993799833,
+          "n": 370
+        },
+        "leap_ratio": {
+          "mean": 0.06361889700941714,
+          "std": 0.05367664079609794,
+          "n": 370
+        }
+      },
+      "rhythm": {
+        "strong_onset_ratio": {
+          "mean": 0.45107380414590853,
+          "std": 0.08495042574025487,
+          "n": 370
+        },
+        "downbeat_onset_ratio": {
+          "mean": 0.24335613184544647,
+          "std": 0.05535099640232801,
+          "n": 370
+        },
+        "long_on_strong_ratio": {
+          "mean": 0.504763908708518,
+          "std": 0.10861940575744673,
+          "n": 370
+        },
+        "strong_beat_gap_ratio": {
+          "mean": 0.10608676293315887,
+          "std": 0.1290902832555393,
+          "n": 370
+        }
+      }
+    },
+    "simaa_self": {
+      "n_generated": 292,
+      "mean_max_sim": 0.9096784303976084,
+      "median_max_sim": 0.9045454545454545,
+      "max_max_sim": 1.0,
+      "mean_trigram_memory": 1.0,
+      "SIMAA@90": 0.5102739726027398,
+      "SIMAA@95": 0.3767123287671233
+    },
+    "mahalanobis_self": {
+      "train_mean": 3.7306025822784217,
+      "train_std": 1.2613094766213266,
+      "gen_mean": 3.7306025822784217,
+      "gen_std": 1.2613094766213266,
+      "t_stat": 0.0,
+      "p_value": 1.0,
+      "frac_within_train95": 0.9486486486486486,
+      "n_train": 370,
+      "n_gen": 370
+    }
+  },
+  "diffusion": {
+    "n_generated": 60,
+    "gen_sec_total": 19.49981927871704,
+    "gen_sec_per_piece": 0.32499698797861737,
+    "theory": {
+      "n_pieces": 60,
+      "key": {
+        "mean": 0.6938830518198226,
+        "std": 0.1283654154862192,
+        "n": 60,
+        "mode": "F major"
+      },
+      "smoothness": {
+        "avg_interval": {
+          "mean": 1.8845197395197395,
+          "std": 0.42908188752782234,
+          "n": 60
+        },
+        "step_ratio": {
+          "mean": 0.7193732193732194,
+          "std": 0.11268688043017405,
+          "n": 60
+        },
+        "direction_change_rate": {
+          "mean": 0.5430380267880268,
+          "std": 0.1903991403472963,
+          "n": 60
+        },
+        "leap_ratio": {
+          "mean": 0.14311558811558808,
+          "std": 0.08717194848681589,
+          "n": 60
+        }
+      },
+      "rhythm": {
+        "strong_onset_ratio": {
+          "mean": 0.4218497474747475,
+          "std": 0.1753501417523958,
+          "n": 60
+        },
+        "downbeat_onset_ratio": {
+          "mean": 0.23201118326118325,
+          "std": 0.10117283375087543,
+          "n": 60
+        },
+        "long_on_strong_ratio": {
+          "mean": 0.43301975801975795,
+          "std": 0.22564059266670008,
+          "n": 60
+        },
+        "strong_beat_gap_ratio": {
+          "mean": 0.37546428380987196,
+          "std": 0.2711442110140996,
+          "n": 60
+        }
+      }
+    },
+    "simaa": {
+      "n_generated": 60,
+      "mean_max_sim": 0.26790059513045444,
+      "median_max_sim": 0.24404761904761904,
+      "max_max_sim": 0.5,
+      "mean_trigram_memory": 0.9283526658526658,
+      "SIMAA@90": 0.0,
+      "SIMAA@95": 0.0
+    },
+    "mahalanobis": {
+      "train_mean": 3.7306025822784217,
+      "train_std": 1.2613094766213266,
+      "gen_mean": 6.1698664215101,
+      "gen_std": 1.7465085373089768,
+      "t_stat": 10.306735649519622,
+      "p_value": 1.2854090084402115e-15,
+      "frac_within_train95": 0.6166666666666667,
+      "n_train": 370,
+      "n_gen": 60
+    },
+    "chord_tone_ratio": {
+      "mean": 0.5604419191919192,
+      "std": 0.13190985212446946
+    },
+    "oscillation_ratio": {
+      "mean": 0.08205128205128205,
+      "std": 0.1011440149913642
+    }
+  },
+  "autoregressive_baseline": {
+    "n_generated": 60,
+    "theory": {
+      "n_pieces": 60,
+      "key": {
+        "mean": 0.7354636010515149,
+        "std": 0.11231636360690415,
+        "n": 60,
+        "mode": "B minor"
+      },
+      "smoothness": {
+        "avg_interval": {
+          "mean": 2.0757275132275135,
+          "std": 0.5374138706732723,
+          "n": 60
+        },
+        "step_ratio": {
+          "mean": 0.5417897842897843,
+          "std": 0.14362503576229316,
+          "n": 60
+        },
+        "direction_change_rate": {
+          "mean": 0.6001208513708514,
+          "std": 0.25258350079132674,
+          "n": 60
+        },
+        "leap_ratio": {
+          "mean": 0.11324989824989824,
+          "std": 0.08975361881301722,
+          "n": 60
+        }
+      },
+      "rhythm": {
+        "strong_onset_ratio": {
+          "mean": 0.14402701465201465,
+          "std": 0.09910519771351324,
+          "n": 60
+        },
+        "downbeat_onset_ratio": {
+          "mean": 0.0965346459096459,
+          "std": 0.05303337392353936,
+          "n": 60
+        },
+        "long_on_strong_ratio": {
+          "mean": 0.09156010656010656,
+          "std": 0.15571752800549893,
+          "n": 60
+        },
+        "strong_beat_gap_ratio": {
+          "mean": 0.5334722222222222,
+          "std": 0.3465017076520254,
+          "n": 60
+        }
+      }
+    },
+    "simaa": {
+      "n_generated": 60,
+      "mean_max_sim": 0.16907397177487363,
+      "median_max_sim": 0.16228070175438597,
+      "max_max_sim": 0.375,
+      "mean_trigram_memory": 0.8426683501683503,
+      "SIMAA@90": 0.0,
+      "SIMAA@95": 0.0
+    },
+    "mahalanobis": {
+      "train_mean": 3.7306025822784217,
+      "train_std": 1.2613094766213266,
+      "gen_mean": 9.153398632396932,
+      "gen_std": 3.7285396714451617,
+      "t_stat": 11.070651326234826,
+      "p_value": 3.0358972948010237e-16,
+      "frac_within_train95": 0.21666666666666667,
+      "n_train": 370,
+      "n_gen": 60
+    },
+    "chord_tone_ratio": {
+      "mean": 0.42808684371184375,
+      "std": 0.1879381743090075
+    },
+    "oscillation_ratio": {
+      "mean": 0.0935897435897436,
+      "std": 0.12088730686012823
+    }
+  }
+}

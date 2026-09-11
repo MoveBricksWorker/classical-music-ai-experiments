@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ==== 大文件排除 (下载的原始权重, 见 Releases) ====
+chord_model_cloud_v4.pt
+melody_model_cloud_v4.pt
+*.dl_*
+__pycache__/
+*.pyc
+
+# ==== 版权排除 (论文原文与提取文本) ====
+论文/
+data/processed/*_fulltext.txt
