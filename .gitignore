@@ -227,3 +227,6 @@ __pycache__/
 # ==== 版权排除 (论文原文与提取文本) ====
 论文/
 data/processed/*_fulltext.txt
+
+# ==== 模型权重走 Releases, 不进仓库 ====
+melody_diffusion_v*.pt

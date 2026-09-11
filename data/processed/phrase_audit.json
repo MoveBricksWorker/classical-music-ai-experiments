@@ -1,0 +1,831 @@
+{
+  "summary": {
+    "n_audited": 40,
+    "rule_recall_vs_llm": 0.3656716417910448,
+    "llm_precision_vs_rule": 0.20242914979757085,
+    "exact_agreement": 0.0
+  },
+  "rows": [
+    {
+      "id": "chorale_123",
+      "title": "Auf, auf, mein Herz, und du, mein ganzer Sinn",
+      "n": 45,
+      "rule": [
+        17,
+        27
+      ],
+      "llm": [
+        7,
+        16,
+        29,
+        35,
+        40,
+        44
+      ],
+      "prec": 0.16666666666666666,
+      "rec": 0.5
+    },
+    {
+      "id": "chorale_307",
+      "title": "Ach Gott, wie manches Herzeleid",
+      "n": 37,
+      "rule": [
+        11,
+        28
+      ],
+      "llm": [
+        9,
+        27,
+        30,
+        36
+      ],
+      "prec": 0.25,
+      "rec": 0.5
+    },
+    {
+      "id": "chorale_282",
+      "title": "Jesu, meine Freude",
+      "n": 39,
+      "rule": [
+        11,
+        24
+      ],
+      "llm": [
+        9,
+        16,
+        20,
+        25,
+        31,
+        38
+      ],
+      "prec": 0.16666666666666666,
+      "rec": 0.5
+    },
+    {
+      "id": "chorale_68",
+      "title": "Komm, heiliger Geist, Herre Gott",
+      "n": 99,
+      "rule": [
+        10,
+        17,
+        27,
+        35,
+        48,
+        59,
+        74,
+        87
+      ],
+      "llm": [
+        4,
+        13,
+        20,
+        26,
+        31,
+        37,
+        45,
+        51,
+        59,
+        65,
+        70,
+        82,
+        87,
+        98
+      ],
+      "prec": 0.21428571428571427,
+      "rec": 0.375
+    },
+    {
+      "id": "chorale_192",
+      "title": "Was bist du doch, o Seele, so betrübet",
+      "n": 33,
+      "rule": [
+        8,
+        15
+      ],
+      "llm": [
+        7,
+        14,
+        26,
+        31
+      ],
+      "prec": 0.5,
+      "rec": 1.0
+    },
+    {
+      "id": "chorale_313",
+      "title": "Das alte Jahr vergangen ist",
+      "n": 55,
+      "rule": [
+        18,
+        28,
+        43
+      ],
+      "llm": [
+        8,
+        9,
+        14,
+        19,
+        27,
+        36,
+        40,
+        45,
+        50,
+        54
+      ],
+      "prec": 0.2,
+      "rec": 0.6666666666666666
+    },
+    {
+      "id": "chorale_246",
+      "title": "Wenn wir in höchsten Nöten sein",
+      "n": 41,
+      "rule": [
+        14
+      ],
+      "llm": [
+        2,
+        9,
+        20,
+        31,
+        40
+      ],
+      "prec": 0.0,
+      "rec": 0.0
+    },
+    {
+      "id": "chorale_325",
+      "title": "Allein Gott in der Höh’ sei Ehr’",
+      "n": 46,
+      "rule": [
+        16,
+        25,
+        34
+      ],
+      "llm": [
+        8,
+        16,
+        29,
+        45
+      ],
+      "prec": 0.25,
+      "rec": 0.3333333333333333
+    },
+    {
+      "id": "chorale_301",
+      "title": "Hilf, Gott, daß mir’s gelinge",
+      "n": 41,
+      "rule": [
+        12,
+        22,
+        28,
+        35
+      ],
+      "llm": [
+        6,
+        15,
+        27,
+        38
+      ],
+      "prec": 0.25,
+      "rec": 0.25
+    },
+    {
+      "id": "chorale_35",
+      "title": "Nun bitten wir den heiligen Geist",
+      "n": 52,
+      "rule": [
+        10,
+        22,
+        32,
+        45
+      ],
+      "llm": [
+        2,
+        7,
+        10,
+        15,
+        23,
+        29,
+        41,
+        51
+      ],
+      "prec": 0.25,
+      "rec": 0.5
+    },
+    {
+      "id": "chorale_314",
+      "title": "O Gott, du frommer Gott",
+      "n": 49,
+      "rule": [
+        14,
+        23,
+        32,
+        38
+      ],
+      "llm": [
+        7,
+        23,
+        31,
+        48
+      ],
+      "prec": 0.5,
+      "rec": 0.5
+    },
+    {
+      "id": "chorale_7",
+      "title": "Freuet euch, ihr Christen alle",
+      "n": 76,
+      "rule": [
+        21,
+        36,
+        43,
+        52
+      ],
+      "llm": [
+        6,
+        18,
+        30,
+        42,
+        54,
+        66,
+        75
+      ],
+      "prec": 0.14285714285714285,
+      "rec": 0.25
+    },
+    {
+      "id": "chorale_244",
+      "title": "Christe, der du bist Tag und Licht",
+      "n": 37,
+      "rule": [
+        15,
+        27
+      ],
+      "llm": [
+        2,
+        8,
+        19,
+        27,
+        30,
+        36
+      ],
+      "prec": 0.16666666666666666,
+      "rec": 0.5
+    },
+    {
+      "id": "chorale_134",
+      "title": "Gott der Vater wohn’ uns bei",
+      "n": 62,
+      "rule": [
+        10,
+        17,
+        31,
+        42,
+        49
+      ],
+      "llm": [
+        7,
+        14,
+        35,
+        46,
+        61
+      ],
+      "prec": 0.0,
+      "rec": 0.0
+    },
+    {
+      "id": "chorale_286",
+      "title": "Herr, ich habe mißgehandelt",
+      "n": 31,
+      "rule": [
+        7,
+        14
+      ],
+      "llm": [
+        6,
+        14,
+        21,
+        27,
+        30
+      ],
+      "prec": 0.4,
+      "rec": 1.0
+    },
+    {
+      "id": "chorale_121",
+      "title": "Ist Gott mein Schild und Helfersmann",
+      "n": 68,
+      "rule": [
+        14,
+        33,
+        43,
+        54
+      ],
+      "llm": [
+        8,
+        22,
+        36,
+        49,
+        67
+      ],
+      "prec": 0.0,
+      "rec": 0.0
+    },
+    {
+      "id": "chorale_100",
+      "title": "Herr Christ, der ein’ge Gott’s-Sohn",
+      "n": 37,
+      "rule": [
+        13,
+        23
+      ],
+      "llm": [
+        7,
+        12,
+        20,
+        29,
+        34
+      ],
+      "prec": 0.2,
+      "rec": 0.5
+    },
+    {
+      "id": "chorale_280",
+      "title": "Wo soll ich fliehen hin",
+      "n": 41,
+      "rule": [
+        11,
+        17
+      ],
+      "llm": [
+        3,
+        9,
+        17,
+        28,
+        36
+      ],
+      "prec": 0.2,
+      "rec": 0.5
+    },
+    {
+      "id": "chorale_285",
+      "title": "Befiehl du deine Wege",
+      "n": 43,
+      "rule": [
+        13,
+        24,
+        35
+      ],
+      "llm": [
+        6,
+        13,
+        18,
+        25,
+        28,
+        33,
+        40,
+        42
+      ],
+      "prec": 0.25,
+      "rec": 0.6666666666666666
+    },
+    {
+      "id": "chorale_247",
+      "title": "Sei Lob und Ehr’ dem höchsten Gut",
+      "n": 46,
+      "rule": [
+        9,
+        19,
+        28
+      ],
+      "llm": [
+        8,
+        17,
+        26,
+        35,
+        45
+      ],
+      "prec": 0.2,
+      "rec": 0.3333333333333333
+    },
+    {
+      "id": "chorale_206",
+      "title": "Des Heil’gen Geistes reiche Gnad’",
+      "n": 32,
+      "rule": [
+        11,
+        23
+      ],
+      "llm": [
+        4,
+        7,
+        13,
+        20,
+        26,
+        31
+      ],
+      "prec": 0.0,
+      "rec": 0.0
+    },
+    {
+      "id": "chorale_332",
+      "title": "Es woll’ uns Gott genädig sein",
+      "n": 37,
+      "rule": [
+        13,
+        20,
+        28
+      ],
+      "llm": [
+        7,
+        11,
+        18,
+        22,
+        29,
+        36
+      ],
+      "prec": 0.16666666666666666,
+      "rec": 0.3333333333333333
+    },
+    {
+      "id": "chorale_79",
+      "title": "O Haupt voll Blut und Wunden",
+      "n": 42,
+      "rule": [
+        9,
+        20,
+        34
+      ],
+      "llm": [
+        2,
+        6,
+        11,
+        17,
+        21,
+        25,
+        28,
+        30,
+        32,
+        34,
+        39,
+        41
+      ],
+      "prec": 0.16666666666666666,
+      "rec": 0.6666666666666666
+    },
+    {
+      "id": "chorale_120",
+      "title": "Werde munter, mein Gemüte",
+      "n": 71,
+      "rule": [
+        8,
+        22,
+        33,
+        52
+      ],
+      "llm": [
+        15,
+        32,
+        47,
+        68
+      ],
+      "prec": 0.25,
+      "rec": 0.25
+    },
+    {
+      "id": "chorale_330",
+      "title": "Wo soll ich fliehen hin",
+      "n": 41,
+      "rule": [
+        11,
+        17,
+        31
+      ],
+      "llm": [
+        3,
+        9,
+        17,
+        28,
+        36
+      ],
+      "prec": 0.2,
+      "rec": 0.3333333333333333
+    },
+    {
+      "id": "chorale_271",
+      "title": "Ich dank’ dir, lieber Herre",
+      "n": 67,
+      "rule": [
+        9,
+        23,
+        32,
+        43,
+        52
+      ],
+      "llm": [
+        7,
+        28,
+        39,
+        50,
+        62
+      ],
+      "prec": 0.0,
+      "rec": 0.0
+    },
+    {
+      "id": "chorale_202",
+      "title": "O Mensch, schau’ Jesum Christum an",
+      "n": 42,
+      "rule": [
+        7,
+        13,
+        19,
+        27
+      ],
+      "llm": [
+        5,
+        7,
+        8,
+        16,
+        21,
+        24,
+        29,
+        30,
+        37,
+        41
+      ],
+      "prec": 0.2,
+      "rec": 0.25
+    },
+    {
+      "id": "chorale_8",
+      "title": "Ermuntre dich, mein schwacher Geist",
+      "n": 49,
+      "rule": [
+        14,
+        23,
+        35
+      ],
+      "llm": [
+        3,
+        12,
+        29,
+        45,
+        48
+      ],
+      "prec": 0.0,
+      "rec": 0.0
+    },
+    {
+      "id": "chorale_348",
+      "title": "Ich hab’ in Gottes Herz und Sinn",
+      "n": 52,
+      "rule": [
+        11,
+        24,
+        33
+      ],
+      "llm": [
+        3,
+        7,
+        11,
+        19,
+        23,
+        30,
+        34,
+        38,
+        46,
+        51
+      ],
+      "prec": 0.3,
+      "rec": 1.0
+    },
+    {
+      "id": "chorale_34",
+      "title": "Gott des Himmels und der Erden",
+      "n": 37,
+      "rule": [
+        11,
+        21
+      ],
+      "llm": [
+        8,
+        20,
+        29,
+        34
+      ],
+      "prec": 0.25,
+      "rec": 0.5
+    },
+    {
+      "id": "chorale_83",
+      "title": "Nun bitten wir den heiligen Geist",
+      "n": 59,
+      "rule": [
+        11,
+        24,
+        35,
+        45
+      ],
+      "llm": [
+        3,
+        19,
+        42,
+        58
+      ],
+      "prec": 0.0,
+      "rec": 0.0
+    },
+    {
+      "id": "chorale_306",
+      "title": "Christus, der uns selig macht",
+      "n": 67,
+      "rule": [
+        14,
+        31,
+        47,
+        56
+      ],
+      "llm": [
+        9,
+        18,
+        30,
+        37,
+        46,
+        53,
+        66
+      ],
+      "prec": 0.2857142857142857,
+      "rec": 0.5
+    },
+    {
+      "id": "chorale_23",
+      "title": "Valet will ich dir geben",
+      "n": 45,
+      "rule": [
+        12,
+        28
+      ],
+      "llm": [
+        5,
+        9,
+        17,
+        28,
+        36,
+        44
+      ],
+      "prec": 0.16666666666666666,
+      "rec": 0.5
+    },
+    {
+      "id": "chorale_156",
+      "title": "Wo Gott zum Haus nicht gibt sein’ Gunst",
+      "n": 34,
+      "rule": [
+        10,
+        20
+      ],
+      "llm": [
+        4,
+        8,
+        16,
+        33
+      ],
+      "prec": 0.0,
+      "rec": 0.0
+    },
+    {
+      "id": "chorale_17",
+      "title": "Gottes Sohn ist kommen",
+      "n": 46,
+      "rule": [
+        14,
+        21,
+        30
+      ],
+      "llm": [
+        7,
+        10,
+        21,
+        30,
+        45
+      ],
+      "prec": 0.4,
+      "rec": 0.6666666666666666
+    },
+    {
+      "id": "chorale_139",
+      "title": "In allen meinen Taten",
+      "n": 40,
+      "rule": [
+        12,
+        25,
+        32
+      ],
+      "llm": [
+        2,
+        5,
+        10,
+        17,
+        24,
+        31,
+        38,
+        39
+      ],
+      "prec": 0.25,
+      "rec": 0.6666666666666666
+    },
+    {
+      "id": "chorale_308",
+      "title": "Ein Lämmlein geht und trägt die Schuld",
+      "n": 78,
+      "rule": [
+        12,
+        27,
+        38,
+        57,
+        68
+      ],
+      "llm": [
+        9,
+        18,
+        34,
+        44,
+        55,
+        68,
+        73,
+        77
+      ],
+      "prec": 0.125,
+      "rec": 0.2
+    },
+    {
+      "id": "chorale_201",
+      "title": "O wir armen Sünder",
+      "n": 65,
+      "rule": [
+        10,
+        15,
+        21,
+        26,
+        33,
+        39,
+        47,
+        50,
+        55,
+        58
+      ],
+      "llm": [
+        10,
+        21,
+        33,
+        47,
+        58,
+        64
+      ],
+      "prec": 0.8333333333333334,
+      "rec": 0.5
+    },
+    {
+      "id": "chorale_370",
+      "title": "Christ lag in Todesbanden",
+      "n": 53,
+      "rule": [
+        11,
+        26,
+        38
+      ],
+      "llm": [
+        8,
+        17,
+        24,
+        29,
+        34,
+        43,
+        50,
+        52
+      ],
+      "prec": 0.0,
+      "rec": 0.0
+    },
+    {
+      "id": "chorale_221",
+      "title": "Nun preiset alle Gottes Barmherzigkeit",
+      "n": 43,
+      "rule": [
+        10,
+        19,
+        28,
+        35
+      ],
+      "llm": [
+        6,
+        18,
+        33,
+        42
+      ],
+      "prec": 0.25,
+      "rec": 0.25
+    }
+  ]
+}
