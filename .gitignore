@@ -237,3 +237,9 @@ data/generated/_*.mid
 # ==== 消融/演示脚本的临时产物 ====
 data/generated/sample_*.mid
 data/generated/resample_*.mid
+
+# ==== 早期草稿 / 测试产物 / 脚本默认输出 (可再生成) ====
+data/generated/piece_*.mid
+data/generated/pipeline_integration_test.mid
+data/processed/standalone_full.mid
+data/processed/v4_full.mid
