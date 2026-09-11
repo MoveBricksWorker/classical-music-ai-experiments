@@ -337,8 +337,10 @@ python tests/test_rendering.py
 - `src/chorale_conditions.py`：条件流编码 + 按曲分组划分的**唯一实现**
   （此前训练/生成/评估三处手抄，迁移已验证与原实现逐窗口一致）
 - `train_v9_chorales.py` / `evaluate_chorale_model.py` / `analyze_leakage.py`
-- v9 权重同样走 Releases（`melody_diffusion_v9_chorales.pt`，28MB；
-  5 折权重 `melody_diffusion_v9_fold{0..4}.pt`）
+- v9 权重走 Releases：[**`model-v9`**](https://github.com/MoveBricksWorker/classical-music-ai-experiments/releases/tag/model-v9)
+  —— 主模型 [`melody_diffusion_v9_chorales.pt`](https://github.com/MoveBricksWorker/classical-music-ai-experiments/releases/download/model-v9/melody_diffusion_v9_chorales.pt)
+  （28MB）+ 5 折权重 `melody_diffusion_v9_fold{0..4}.pt` + 两个对照权重
+  （`v9_leaked.pt` 复现旧口径 0.809、`v9_grouped_v8hp.pt` 复现诚实口径 0.434）
 
 ## 7.5 一句话
 
