@@ -1,0 +1,11 @@
+{
+  "boundary_f1": 0.08237986270022883,
+  "boundary_precision": 0.28125,
+  "boundary_recall": 0.04825737265415549,
+  "cadence_realization": 0.34615384615384615,
+  "self_consistency": 0.006944444444444444,
+  "gen_phrase_len_mean": 11.451923076923077,
+  "corpus_phrase_len_mean": 11.429451632778804,
+  "gen_ac_sim": 0.5134211968586968,
+  "corpus_ac_sim": 0.5650976485493217
+}
