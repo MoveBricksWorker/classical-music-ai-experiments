@@ -24,6 +24,7 @@ from model.architectures import (
     ChordGPTv4, MelodyGPT,
     build_func_chord_map, chord_name_to_info,
 )
+from model.melody_diffusion import MelodyDiffusion
 import mido
 from mido import MidiFile, MidiTrack, Message, MetaMessage
 
@@ -87,6 +88,21 @@ TEXTURES = [alberti_bass, broken_octave, arpeggio]
 # ═══════════════════════════════════════════════════════════════
 # 模型加载
 # ═══════════════════════════════════════════════════════════════
+
+DIFFUSION_PT = os.path.join(ROOT, 'melody_diffusion_v7_phrase.pt')
+DIFFUSION_KW = dict(d=288, h=8, L=8, max_len=256,
+                    num_pos_bins=8, num_toend_bins=4, num_phrase_bins=6, use_rope=True)
+
+
+def load_diffusion_model(device: str):
+    """加载非自回归扩散旋律模型 (GETMusic 式 D3PM)。"""
+    m = MelodyDiffusion(num_funcs=len(F2ID_MELODY), num_types=len(T2ID),
+                        **DIFFUSION_KW).to(device)
+    m.load_state_dict(torch.load(DIFFUSION_PT, map_location=device, weights_only=True),
+                      strict=True)
+    m.eval()
+    return m
+
 
 def load_models(device: str = 'cuda'):
     """加载和弦模型和旋律模型。"""
@@ -362,10 +378,162 @@ def build_midi_track(events: list, velocity: int, channel: int = 0,
     return track
 
 
+def compute_phrase_plan(chords: list[dict], notes_per_chord: int = NOTES_PER_CHORD,
+                        max_phrase_chords: int = 2) -> list[int]:
+    """从和声推导乐句计划 → 每音的 phrase_toend bin (0=句末换气点, 封顶 5)。
+
+    边界来源:
+      1) 和声终止式 D/PD→T (旋律应在此"收束换气");
+      2) 曲末和弦;
+      3) 若相邻边界间隔超过 max_phrase_chords, 中间补边界
+         (训练语料的乐句约 3-15 音, 补边界使推理乐句长度落在同尺度)。
+    """
+    n = len(chords)
+    ends = set()
+    for i in range(1, n):
+        if chords[i - 1].get('func') in ('D', 'PD') and chords[i].get('func') == 'T':
+            ends.add(i - 1)
+    ends.add(n - 1)
+    # 细分过长的乐句
+    ordered = sorted(ends)
+    sub = set(ends)
+    prev = -1
+    for e in ordered:
+        k = prev + max_phrase_chords
+        while e - k >= max_phrase_chords:
+            sub.add(k)
+            k += max_phrase_chords
+        prev = e
+    note_ends = sorted(c * notes_per_chord + notes_per_chord - 1 for c in sub)
+    labels = []
+    for ci in range(n):
+        for j in range(notes_per_chord):
+            i = ci * notes_per_chord + j
+            nxt = next((e for e in note_ends if e >= i), note_ends[-1])
+            labels.append(min(nxt - i, 5))
+    return labels
+
+
+def compute_sentence_plan(chords: list[dict], notes_per_chord: int = NOTES_PER_CHORD,
+                          max_phrase_chords: int = 4) -> tuple[list[int], list[int]]:
+    """句子级规划 (两级生成的"规划器"): 从和声进行推导终止式到达点。
+
+    与训练数据 (众赞歌) 同口径:
+      - 到达点 = 终止式和弦的起始音 (全终止 I / 半终止 V / 阻碍 vi / 变格 I);
+      - 半终止只在属和弦**不立即解决**时单列 (否则它只是全终止式的一半);
+      - 末到达点 = 全曲最后一个音。
+    返回 (phrase_bin 列表, cadence 列表), 长度 = len(chords) * notes_per_chord。
+    cadence: 0=弱分割, 1=全终止, 2=半终止, 3=阻碍, 4=变格。
+    """
+    n = len(chords)
+
+    def _deg(cn: str) -> str:
+        cl = (cn or '').lower()
+        for k in ('vii', 'vi', 'v', 'iv', 'iii', 'ii', 'i'):
+            if cl.startswith(k):
+                return k
+        return ''
+
+    arrivals: list[tuple[int, int]] = []
+    # 1) 解决型到达点
+    for i in range(1, n):
+        p, c = chords[i - 1], chords[i]
+        fp, fc = p.get('func'), c.get('func')
+        cp, cc = _deg(p.get('chord', '')), _deg(c.get('chord', ''))
+        if fp == 'D' and fc == 'T' and cc == 'vi':
+            arrivals.append((i, 3))                       # 阻碍 V→vi
+        elif fp == 'D' and fc == 'T':
+            arrivals.append((i, 1))                       # 全终止 V→I
+        elif fp == 'PD' and fc == 'T' and cp == 'iv' and cc == 'i':
+            arrivals.append((i, 4))                       # 变格 IV→I
+    # 2) 半终止: 到达属和弦且不立即解决到 I
+    for i in range(1, n):
+        if chords[i].get('func') != 'D':
+            continue
+        if chords[i - 1].get('func') not in ('T', 'PD'):
+            continue
+        nxt = chords[i + 1] if i + 1 < n else None
+        if nxt is not None and nxt.get('func') == 'T' and _deg(nxt.get('chord', '')) == 'i':
+            continue
+        arrivals.append((i, 2))
+    arrivals = sorted(set(arrivals))
+    # 3) 近距离冲突: 保留强者 (全 1 > 阻碍 3 > 变格 4 > 半 2)
+    strength = {1: 0, 3: 1, 4: 2, 2: 3}
+    merged: list[tuple[int, int]] = []
+    for idx, ct in arrivals:
+        if merged and idx - merged[-1][0] < 2:
+            if strength[ct] < strength[merged[-1][1]]:
+                merged[-1] = (idx, ct)
+            continue
+        merged.append((idx, ct))
+    arrivals = merged
+
+    # 4) 音级到达点 (到达和弦首音; 末到达点 = 最后一音)
+    pts: list[tuple[int, int]] = [(idx * notes_per_chord, ct) for idx, ct in arrivals]
+    total = n * notes_per_chord
+    last_note = total - 1
+    if not pts or pts[-1][0] != last_note:
+        if pts and last_note - pts[-1][0] < notes_per_chord:
+            pts[-1] = (last_note, 1)                     # 并入末音, 标全终止
+        else:
+            pts.append((last_note, 1))
+    # 5) 过长乐句补弱分割
+    sub: list[tuple[int, int]] = []
+    prev = -1
+    for note_idx, ct in pts:
+        k = prev + max_phrase_chords * notes_per_chord
+        while note_idx - k >= max_phrase_chords * notes_per_chord:
+            sub.append((k, 0))
+            k += max_phrase_chords * notes_per_chord
+        sub.append((note_idx, ct))
+        prev = note_idx
+    all_pts = sorted(sub)
+
+    phrase_bin, cadence = [], []
+    for i in range(total):
+        nxt = next((p for p in all_pts if p[0] >= i), all_pts[-1])
+        phrase_bin.append(min(nxt[0] - i, 5))
+        cadence.append(nxt[1])
+    return phrase_bin, cadence
+
+
+def snap_to_measures(chords: list[dict], pair_prob: float = 0.3) -> list[dict]:
+    """把和弦时值吸附到 4/4 小节网格: 每小节 1 个 (4拍) 或 2 个 (2+2) 和弦。
+
+    ChordGPT 的时值是量化 ID (0.25-4 拍任意值), 和弦变化会落在非小节位置,
+    旋律的等分 slot 也随之变成非节拍间距 (如 1.5 拍和弦 → 0.375 拍/音),
+    与织体的八分脉冲错位 —— 听感上"旋律与和弦拍号对不上"的根源。
+    """
+    out = []
+    i = 0
+    n = len(chords)
+    while i < n:
+        c = dict(chords[i])
+        # 乐句末判定用 D/PD→T 规则 (ChordGPT 的 cad 头已知失效, 几乎全输出 1,
+        # 不能依赖; 与 split_phrases 同口径)
+        next_is_t = (i + 1 < n and c.get('func') in ('D', 'PD')
+                     and chords[i + 1].get('func') == 'T')
+        at_phrase_end = next_is_t or (i == n - 1)
+        # 成对半小节拆分: 不与乐句末/曲末和弦配对
+        if (not at_phrase_end and i + 2 < n and random.random() < pair_prob):
+            c['dur'] = 5                      # 2 拍
+            out.append(c)
+            c2 = dict(chords[i + 1]); c2['dur'] = 5
+            out.append(c2)
+            i += 2
+        else:
+            c['dur'] = 7                      # 4 拍 (整小节)
+            out.append(c)
+            i += 1
+    return out
+
+
 def generate_midi(chords: list[dict], midi_pitches: list[int],
                   melody_rhythms: list[int], bpm: int,
                   output_path: str):
     """mido 直写三轨 MIDI：旋律 / 织体 / 和弦。"""
+    chords = snap_to_measures(chords)
+    phrase_labels = compute_phrase_plan(chords)   # 0 = 句末换气点
     phrases = split_phrases(chords)
     phrase_textures = {id(p): random.choice(TEXTURES) for p in phrases}
 
@@ -375,9 +543,10 @@ def generate_midi(chords: list[dict], midi_pitches: list[int],
     tick = 0
     mel_idx = 0
 
-    for phrase in phrases:
+    for pi, phrase in enumerate(phrases):
         tex_func = phrase_textures[id(phrase)]
-        for chord in phrase:
+        for ci, chord in enumerate(phrase):
+            is_final_measure = (pi == len(phrases) - 1) and (ci == len(phrase) - 1)
             cn = chord['chord']
             r, ct = chord_name_to_info(cn)
             dur_beats = ID2DUR.get(chord['dur'], 1.0)
@@ -390,30 +559,61 @@ def generate_midi(chords: list[dict], midi_pitches: list[int],
                 ev_chord_pad.append((tick, 'on', p))
                 ev_chord_pad.append((ch_end, 'off', p))
 
-            # 织体轨
-            n_tex = max(1, int(dur_beats * 2))
+            # 织体轨: 每拍 2 音 (八分脉冲), 与小节网格对齐
+            n_tex = max(1, int(round(dur_beats * 2)))
             tex_notes = tex_func(r, ct, n=n_tex)
             for j in range(n_tex):
-                t_on = tick + int(j * dur_ticks / n_tex)
-                t_off = tick + int((j + 1) * dur_ticks / n_tex)
+                t_on = tick + int(round(j * dur_ticks / n_tex))
+                t_off = tick + int(round((j + 1) * dur_ticks / n_tex))
                 ev_texture.append((t_on, 'on', tex_notes[j]))
                 ev_texture.append((t_off, 'off', tex_notes[j]))
 
-            # 旋律轨：保留 compose_melody 生成的节奏信息
-            slot = dur_ticks / NOTES_PER_CHORD
+            # 旋律轨: 小节内按节奏时值比例排布 → 量化到八分网格 → 填满整小节。
+            # (原实现按 和弦时值/4 等分 slot, 非节拍化时值导致与织体网格错位;
+            #  纯比例归一化也会落在非网格位置, 故最终量化到 0.5 拍网格。)
+            GRID = 0.5                       # 八分音符网格 (拍)
+            measure_rh = [MELODY_RHYTHM.get(
+                melody_rhythms[mel_idx + j] if mel_idx + j < len(melody_rhythms) else 2,
+                0.5) for j in range(NOTES_PER_CHORD)]
+            total_rh = sum(measure_rh)
+            scale = dur_beats / total_rh if total_rh > 0 else 0
+            if not (0.4 <= scale <= 2.5):    # 极端比例 → 均分兜底
+                measure_rh = [1.0] * NOTES_PER_CHORD
+                scale = dur_beats / NOTES_PER_CHORD
+            # 累积位置 → 比例缩放 → 量化
+            raw, acc = [], 0.0
+            for j in range(NOTES_PER_CHORD):
+                raw.append(acc * scale)
+                acc += measure_rh[j]
+            onsets = []
+            prev = -GRID
+            for pos in raw:
+                p = round(pos / GRID) * GRID
+                p = max(p, prev + GRID)                 # 严格递增
+                p = min(p, dur_beats - GRID)            # 不越界
+                onsets.append(p)
+                prev = p
+            if is_final_measure:
+                # 终止式节奏公式: 短-短-短-长 (末音从第 3 拍持续到小节末),
+                # 保证终止长音不被比例归一化压缩
+                onsets = [0.0, 0.5, 1.0, max(dur_beats - 2.0, 1.0)]
             for j in range(NOTES_PER_CHORD):
                 if mel_idx >= len(midi_pitches):
                     break
-
                 midi = midi_pitches[mel_idx]
-                rh = melody_rhythms[mel_idx] if mel_idx < len(melody_rhythms) else 2
+                lab = phrase_labels[mel_idx] if mel_idx < len(phrase_labels) else 5
+                is_last_note = (mel_idx == len(midi_pitches) - 1)
                 mel_idx += 1
-
-                t_on = tick + int(j * slot)
-                note_len = min(int(MELODY_RHYTHM.get(rh, 0.25) * TPB),
-                               int(slot))
-                t_off = t_on + max(note_len, 1)
-
+                t_on = tick + int(round(onsets[j] * TPB))
+                if is_final_measure and j == NOTES_PER_CHORD - 1:
+                    t_off = ch_end
+                else:
+                    nxt = onsets[j + 1] if j + 1 < NOTES_PER_CHORD else dur_beats
+                    length = max(nxt - onsets[j], GRID)
+                    # 换气: 句末音缩短 ~35%, 在下一乐句前留出气口
+                    if lab == 0 and not is_last_note:
+                        length *= 0.65
+                    t_off = tick + int(round((onsets[j] + length * 0.95) * TPB))
                 if midi >= 0:
                     ev_melody.append((t_on, 'on', midi))
                     ev_melody.append((t_off, 'off', midi))
@@ -440,30 +640,117 @@ def generate_midi(chords: list[dict], midi_pitches: list[int],
 # 旋律约束后处理（音乐理论规则，引导但不覆盖模型输出）
 # ═══════════════════════════════════════════════════════════════
 
+def assign_octaves_min_leap(pcs: list[int], base: int = 60, lo: int = 55, hi: int = 84) -> list[int]:
+    """跳进最小化八度分配。
+
+    逐音选择使 |ΔMIDI| 最小的八度 (音级线连续性优先), 并把旋律约束在
+    [lo, hi] 音域内。旧的区段式八度拱形 (0→1→0→-1) 会在区段交界产生
+    整八度大跳 (实测占比 24-37%), 是听感"诡异"的主要来源。
+    """
+    out = []
+    prev = None
+    for pc in pcs:
+        if pc >= 12:            # REST
+            out.append(-1)
+            continue
+        best, best_d = None, 1e9
+        for octave in range(2, 7):
+            midi = pc + octave * 12
+            if midi < lo or midi > hi:
+                continue
+            d = abs(midi - base) if prev is None else abs(midi - prev)
+            if d < best_d:
+                best_d, best = d, midi
+        out.append(best if best is not None else pc + 60)
+        prev = best if best is not None else prev
+    return out
+
+
+def resolve_ending(midi_pitches: list[int], target_pc: int = 0, n_last: int = 4) -> list[int]:
+    """结尾解决: 最后 2 音用标准终止式公式收束 (7→0 或 2→0), 末音落主音。
+
+    比旧的"就近下移 1-2 级"更可靠: 导音/上主音级进解决到主音是古典终止
+    式的核心语汇; 倒数 3/4 音轻微向主音方向靠拢。
+    """
+    out = list(midi_pitches)
+    n = len(out)
+    if n == 0:
+        return out
+    # 定位最后两个"实音" (末尾可能是休止, 不能只看列表末位)
+    sounding = [i for i in range(n) if out[i] >= 0]
+    if not sounding:
+        return out
+    last_i = sounding[-1]
+    # 末音: 距前音最近的主音
+    prev = out[sounding[-2]] if len(sounding) >= 2 else 60
+    cands = [target_pc + o * 12 for o in range(2, 7)]
+    out[last_i] = min(cands, key=lambda m: abs(m - prev))
+    # 倒数第 2 音: 导音(B) 或 上主音(D), 取距前音近者
+    if len(sounding) >= 2:
+        j = sounding[-2]
+        prev2 = out[sounding[-3]] if len(sounding) >= 3 else 60
+        lead = target_pc + 11            # B (导音, 下方解决)
+        super_ = target_pc + 2           # D (上主音)
+        cands2 = [lead - 12 * k for k in range(-1, 3)] + [super_ - 12 * k for k in range(-1, 3)]
+        out[j] = min(cands2, key=lambda m: abs(m - prev2))
+    # 倒数 3/4 音: 轻微向主音方向靠拢 (不超过 1 个半音, 保持原有轮廓)
+    for idx in range(max(0, len(sounding) - n_last), max(0, len(sounding) - 2)):
+        i = sounding[idx]
+        d = (out[i] % 12 - target_pc) % 12
+        if 1 <= d <= 2:
+            out[i] -= 1
+        elif 10 <= d <= 11:
+            out[i] += 1
+    return out
+
+
 def polish_melody(pitch_classes, rhythms, chords, chord_tones_all):
-    """轻量后处理：八度拱形 + 结尾解决。scorer 已处理大部分约束。"""
+    """后处理: 跳进最小化八度分配 + 结尾解决 + 收尾长音。
+
+    (重写自旧的区段式八度拱形版本; 旧版在区段交界产生 24-37% 的
+    整八度大跳, 听感断裂。)
+    """
     n = len(chords)
-    midi_out = []; rh_out = list(rhythms)
-    for idx, pc in enumerate(pitch_classes):
-        c_idx = min(idx // NOTES_PER_CHORD, n - 1)
-        t = idx / max(len(pitch_classes) - 1, 1)
-        if t < 0.20:       oct = 0
-        elif t < 0.50:     oct = 0 if t < 0.35 else 1
-        elif t < 0.70:     oct = 1
-        elif t < 0.88:     oct = 0
-        else:              oct = -1
-        if pc >= 12:
-            midi_out.append(-1); continue
-        midi = pc + (OCTAVE_MELODY + oct) * 12
-        if c_idx >= n - 2 and idx % NOTES_PER_CHORD >= NOTES_PER_CHORD - 2:
-            target = (0, 4, 7)[hash(str(idx)) % 3]
-            if abs(midi % 12 - target) <= 3:
-                midi = midi - (midi % 12) + target
-            rh_out[idx] = min(rh_out[idx] + 2, 7)
-        if idx == len(pitch_classes) - 1:
-            midi = (OCTAVE_MELODY + oct) * 12; rh_out[idx] = 6
-        midi_out.append(midi)
+    midi_out = assign_octaves_min_leap(pitch_classes, base=OCTAVE_MELODY * 12,
+                                       lo=OCTAVE_MELODY * 12 - 5,
+                                       hi=OCTAVE_MELODY * 12 + 12)
+    midi_out = resolve_ending(midi_out, target_pc=0, n_last=4)
+    rh_out = list(rhythms)
+    for idx in range(max(0, len(rh_out) - 4), len(rh_out)):
+        rh_out[idx] = min(max(rh_out[idx], 5), 7)   # 收尾长音 (附点四分起)
     return midi_out, rh_out
+
+
+def score_candidate(cand_pcs: list[int], chord_tones_all: list[list[int]]) -> float:
+    """候选旋律评分: 级进率 + 和弦音比例贴近 50% + 重复惩罚。"""
+    score = 0.0
+    chord_count = 0
+    step_count = 0
+    repeat_count = 0
+    prev_pc = None
+    prev2_pc = None
+    for i, pc in enumerate(cand_pcs):
+        if pc >= 12:  # REST
+            prev_pc = None
+            continue
+        c_idx = i // NOTES_PER_CHORD
+        cts = chord_tones_all[min(c_idx, len(chord_tones_all) - 1)]
+        if pc in cts:
+            chord_count += 1
+        if prev_pc is not None:
+            d = min(abs(pc - prev_pc), 12 - abs(pc - prev_pc))
+            if 1 <= d <= 2:
+                step_count += 1
+            if pc == prev_pc or (prev2_pc is not None and pc == prev2_pc):
+                repeat_count += 1
+        prev2_pc = prev_pc
+        prev_pc = pc
+    n_valid = sum(1 for p in cand_pcs if p < 12)
+    score += step_count / max(n_valid, 1) * 2.0    # 级进率
+    score -= repeat_count / max(n_valid, 1) * 1.5  # 重复率
+    ct_ratio = chord_count / max(n_valid, 1)
+    score -= abs(ct_ratio - 0.5) * 1.0             # 和弦音比例偏离 50% 就扣分
+    return score
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -489,15 +776,22 @@ def main():
         print('错误: 生成的和弦太少，终止。')
         return
 
-    # 3) MelodyGPT 生成旋律（NOTES_PER_CHORD=4 音/和弦上下文）
-    print('ML 谱写旋律 ...')
+    # 3) 旋律生成（NOTES_PER_CHORD=4 音/和弦上下文）
+    use_diffusion = os.path.exists(DIFFUSION_PT)
+    print(f'谱写旋律 ({"扩散非自回归" if use_diffusion else "MelodyGPT 自回归"}) ...')
     n_chords = len(chords)
     total_notes = n_chords * NOTES_PER_CHORD
 
-    # 构建模型输入：每个和弦重复 NOTES_PER_CHORD 次
+    # 构建条件：每个和弦重复 NOTES_PER_CHORD 次。
+    # 类型重映射到语料 LLM 标注约定 (属和弦绝大多数被标注为 M 三和弦:
+    # (D,M,7) 366 次 vs (D,dom7,7) 仅 65 次) —— 避免分布外条件触发
+    # 旋律模型的同音嗡鸣 (实测振荡率 62%→47%)。
+    TYPE_REMAP = {'dom7': 'M', 'm7': 'm', 'M7': 'M',
+                  'dim7': 'dim', 'hdim7': 'dim', 'aug': 'M'}
     cf_t, ct_t, cr_t = [], [], []
     for c in chords:
         r, ct = chord_name_to_info(c['chord'])
+        ct = TYPE_REMAP.get(ct, ct)
         fid = min(F2ID_MELODY.get(c['func'], 4), len(F2ID_MELODY) - 1)
         tid = min(T2ID.get(ct, 0), len(T2ID) - 1)
         cf_t.extend([fid] * NOTES_PER_CHORD)
@@ -507,6 +801,17 @@ def main():
     cf = torch.tensor([cf_t], device=device)
     ct_tensor = torch.tensor([ct_t], device=device)
     cr = torch.tensor([cr_t], device=device)
+
+    # 结构流标签 (与训练同口径: 单曲从头到尾)
+    L_gen = total_notes
+    struct_pos = torch.tensor([[min(7, int(i / L_gen * 8)) for i in range(L_gen)]],
+                              device=device)
+    tb = []
+    for i in range(L_gen):
+        rem = 1.0 - (i + 1) / L_gen
+        tb.append(0 if rem < 0.06 else (1 if rem < 0.15 else (2 if rem < 0.40 else 3)))
+    struct_toend = torch.tensor([tb], device=device)
+    phrase_bin = torch.tensor([compute_phrase_plan(chords)], device=device)
 
     # 构建 scorer：乐理评分引导采样（替代硬规则）
     chord_tones_all = []
@@ -543,43 +848,31 @@ def main():
     best_pcs = None
     best_rhythms = None
 
-    for cand in range(NUM_CANDIDATES):
-        gp, grl, grh = melody_model.gen(cf, ct_tensor, cr, max_len=total_notes, temp=1.0,
-                                         notes_per_chord=NOTES_PER_CHORD, scorer=melody_scorer)
-        cand_pcs = [int(p) for p in gp[0].tolist()]
-        cand_rhythms = [int(r) for r in grh[0].tolist()]
-
-        # 候选旋律评分
-        score = 0.0
-        chord_count = 0
-        step_count = 0
-        repeat_count = 0
-        prev_pc = None
-        prev2_pc = None
-        for i, pc in enumerate(cand_pcs):
-            if pc >= 12:  # REST
-                prev_pc = None; continue
-            c_idx = i // NOTES_PER_CHORD
-            cts = chord_tones_all[min(c_idx, len(chord_tones_all)-1)]
-            if pc in cts:
-                chord_count += 1
-            if prev_pc is not None:
-                d = min(abs(pc - prev_pc), 12 - abs(pc - prev_pc))
-                if 1 <= d <= 2:
-                    step_count += 1
-                if pc == prev_pc or (prev2_pc is not None and pc == prev2_pc):
-                    repeat_count += 1
-            prev2_pc = prev_pc
-            prev_pc = pc
-        n_valid = sum(1 for p in cand_pcs if p < 12)
-        score += step_count / max(n_valid, 1) * 2.0   # 级进率
-        score -= repeat_count / max(n_valid, 1) * 1.5  # 重复率
-        ct_ratio = chord_count / max(n_valid, 1)
-        score -= abs(ct_ratio - 0.5) * 1.0  # 和弦音比例偏离 50% 就扣分
-        if score > best_score:
-            best_score = score
-            best_pcs = cand_pcs
-            best_rhythms = cand_rhythms
+    if use_diffusion:
+        diff_model = load_diffusion_model(device)
+        # 每个候选: 不同随机种子 → 迭代去掩码 + scorer 引导精修
+        for cand in range(NUM_CANDIDATES):
+            gp, grh = diff_model.generate(
+                cf[:, ::NOTES_PER_CHORD], ct_tensor[:, ::NOTES_PER_CHORD],
+                cr[:, ::NOTES_PER_CHORD],
+                steps=16, temp=0.85, remask_steps=6, remask_ratio=0.3,
+                scorer=melody_scorer, scorer_steps=4, repeat_damp=0.05,
+                pos_bin=struct_pos, toend_bin=struct_toend, phrase_bin=phrase_bin,
+                seed=cand * 1000 + 7, expand=True)
+            cand_pcs = [int(p) for p in gp[0].tolist()]
+            cand_rhythms = [int(r) for r in grh[0].tolist()]
+            score = score_candidate(cand_pcs, chord_tones_all)
+            if score > best_score:
+                best_score, best_pcs, best_rhythms = score, cand_pcs, cand_rhythms
+    else:
+        for cand in range(NUM_CANDIDATES):
+            gp, grl, grh = melody_model.gen(cf, ct_tensor, cr, max_len=total_notes, temp=1.0,
+                                             notes_per_chord=NOTES_PER_CHORD, scorer=melody_scorer)
+            cand_pcs = [int(p) for p in gp[0].tolist()]
+            cand_rhythms = [int(r) for r in grh[0].tolist()]
+            score = score_candidate(cand_pcs, chord_tones_all)
+            if score > best_score:
+                best_score, best_pcs, best_rhythms = score, cand_pcs, cand_rhythms
 
     print(f'  选了候选 #{list(range(NUM_CANDIDATES))} 中得分最高的 (score={best_score:.2f})')
     m_pcs = best_pcs
@@ -599,6 +892,8 @@ def main():
         func_counts[c['func']] = func_counts.get(c['func'], 0) + 1
     phrases = split_phrases(chords)
     print(f'统计: {len(chords)}和弦 | {len(phrases)}乐句 | 功能分布: {func_counts}')
+    prog = ' - '.join(f"{c['func']}:{c['chord']}" for c in chords)
+    print(f'和弦进行: {prog}')
     print('完成!')
 
 if __name__ == '__main__':
