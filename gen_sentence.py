@@ -12,7 +12,7 @@
 用法: python gen_sentence.py [--seed N] [--pieces 2] [--out PATH]
 """
 import sys, os, json, argparse, random, math
-from collections import Counter
+
 from pathlib import Path
 
 ROOT = Path(__file__).parent
@@ -26,6 +26,7 @@ from mido import MidiFile, MidiTrack, Message, MetaMessage
 from constants import CHORD_INTERVALS, F2ID_MELODY, T2ID, MELODY_RHYTHM
 from gen_full import alberti_bass, broken_octave, arpeggio, TEXTURES
 from model.melody_diffusion import MelodyDiffusion, REST
+from chorale_conditions import piece_conditions  # 条件编码唯一实现 (训练同源)
 
 TPB = 480
 OCT_BASE = 64        # 旋律八度基准 (E4), 原 72=C5 偏高
@@ -34,49 +35,78 @@ ID2TYPE = {v: k for k, v in T2ID.items()}
 ID2FUNC = {v: k for k, v in F2ID_MELODY.items()}
 
 
-def load_model(device='cuda'):
+def default_model_path():
+    """主模型: 优先 v9 (按曲分组划分训练), 回退 v8 (旧权重, 有泄漏口径)。"""
+    for name in ('melody_diffusion_v9_chorales.pt', 'melody_diffusion_v8_chorales.pt'):
+        p = ROOT / name
+        if p.exists():
+            return p
+    return ROOT / 'melody_diffusion_v8_chorales.pt'
+
+
+def load_model(device='cuda', path=None):
     m = MelodyDiffusion(d=320, h=8, L=6, max_len=256,
                         num_funcs=len(F2ID_MELODY), num_types=len(T2ID),
                         num_pos_bins=8, num_toend_bins=4, num_phrase_bins=7,
                         num_cadence_types=5, use_rope=True).to(device)
-    m.load_state_dict(torch.load(ROOT / 'melody_diffusion_v8_chorales.pt',
+    m.load_state_dict(torch.load(path or default_model_path(),
                                  map_location=device, weights_only=True))
     m.eval()
     return m
 
 
-def piece_conditions(piece):
-    """块恒定和声条件 + 乐句/结构标签 (与训练同口径)。"""
-    notes = piece['notes']
-    n = len(notes)
-    fids = [F2ID_MELODY.get(nt['func'], 4) for nt in notes]
-    tids = [T2ID.get(nt['type'], 0) for nt in notes]
-    rids = [min(11, nt['root']) for nt in notes]
+def render_melody_timing(rhythms, is_phrase_end, beats_per_bar=4.0, breath=0.25,
+                         grid=0.25):
+    """把模型的节奏 bin 渲染成 (起点拍, 时值拍) —— 保证不重叠、不偏格。
+
+    为什么不是"每音一拍"：旧口径 min(bin, 1.0) 把所有音压到 ≤1 拍, 模型
+    学到的句末拉长 (bin 6-7) 根本进不了 MIDI。为什么不是自由累计时值：
+    会和按小节锁定的和声/织体错位 (此前修过的"拍号对不上")。
+    做法: 小节仍锁 4 拍(4 音), 小节内按节奏 bin 比例分配, 再吸附到 `grid`
+    (默认十六分网格, 减少合并); 时值取"相邻起点之差", 因此天然不重叠; 句末音留
+    `breath` 拍气口。相邻音被吸到同一格时后者并入前者 (避免零时值)。
+    """
+    n = len(rhythms)
+    # 1) 小节内按比例分配 (拍)
+    frac = [0.0] * n
+    bar_end = {}
     for b0 in range(0, n, 4):
-        blk = slice(b0, min(b0 + 4, n))
-        fids[b0:blk.stop] = [Counter(fids[blk]).most_common(1)[0][0]] * (blk.stop - b0)
-        tids[b0:blk.stop] = [Counter(tids[blk]).most_common(1)[0][0]] * (blk.stop - b0)
-        rids[b0:blk.stop] = [Counter(rids[blk]).most_common(1)[0][0]] * (blk.stop - b0)
-    # 乐句标签
-    ends = {ph['note']: ph['cadence'] for ph in piece['phrases']}
-    cad_map = {'authentic': 1, 'half': 2, 'deceptive': 3, 'plagal': 4}
-    e_sorted = sorted(ends.keys())
-    phrase_bin, cadence, boundary, pos_bin, toend_bin = [], [], [], [], []
-    di, cur_end = 0, e_sorted[0]
-    cur_cad = cad_map[ends[cur_end]]
+        bar_start = (b0 // 4) * beats_per_bar
+        idxs = list(range(b0, min(b0 + 4, n)))
+        w = [MELODY_RHYTHM.get(rhythms[i], 0.5) for i in idxs]
+        total = sum(w) or 1.0
+        t = 0.0
+        for k, i in enumerate(idxs):
+            frac[i] = bar_start + t
+            t += beats_per_bar * w[k] / total
+        bar_end[b0] = bar_start + beats_per_bar
+    # 2) 吸附网格 + 单调化
+    q = []
+    last_valid = None
     for i in range(n):
-        while i > cur_end and di + 1 < len(e_sorted):
-            di += 1
-            cur_end = e_sorted[di]
-            cur_cad = cad_map[ends[cur_end]]
-        phrase_bin.append(min(cur_end - i, 5))
-        cadence.append(cur_cad)
-        boundary.append(1 if i == cur_end else 0)
-        pos_bin.append(min(int(i / n * 8), 7))
-        rem = 1.0 - (i + 1) / n
-        toend_bin.append(0 if rem < 0.06 else (1 if rem < 0.15 else (2 if rem < 0.4 else 3)))
-    return dict(func=fids, type=tids, root=rids, phrase_bin=phrase_bin,
-                cadence=cadence, boundary=boundary, pos_bin=pos_bin, toend_bin=toend_bin)
+        v = round(frac[i] / grid) * grid
+        if last_valid is not None and v <= last_valid:
+            v = None                      # 与前音同格 → 并入前音
+        else:
+            last_valid = v
+        q.append(v)
+    # 3) 时值 = 下一有效起点 (或小节末) - 本音起点
+    out = []
+    for i in range(n):
+        if q[i] is None:
+            continue
+        nxt = None
+        for j in range(i + 1, n):
+            if q[j] is not None:
+                nxt = q[j] if (j // 4) == (i // 4) else bar_end[(i // 4) * 4]
+                break
+        if nxt is None:
+            nxt = bar_end[(i // 4) * 4]
+        dur = nxt - q[i]
+        if is_phrase_end[i]:
+            dur = max(dur - breath, grid)
+        out.append((i, q[i], dur))
+    return out
 
 
 def assign_octaves(pcs, base=OCT_BASE, lo=55, hi=79):
@@ -122,28 +152,43 @@ def resolve_cadence_endings(pitches, cond, target_pc_of_arrival):
     return out
 
 
-def write_midi(chords_span, midi_pitches, rhythms, out_path, bpm=76):
-    """旋律 + 和声垫 双轨 MIDI (块恒定: 每 4 音一个和弦, 4 拍)。"""
+def write_midi(chords_span, midi_pitches, rhythms, out_path, bpm=76,
+               breath=0.25, render='rhythm'):
+    """旋律 + 织体 + 和声垫 三轨 MIDI。
+
+    render='rhythm' (默认): 小节内按模型节奏 bin 比例分配 4 拍 (句末留气口);
+    render='slot'  (旧口径): 每音固定 1 拍槽位, 时值截断到 1 拍 —— 
+    会把模型学到的句末拉长压掉, 仅用于复现历史成品。
+    """
     mid = MidiFile(ticks_per_beat=TPB)
     t0 = MidiTrack()
     t0.append(MetaMessage('set_tempo', tempo=mido.bpm2tempo(bpm)))
     t0.append(MetaMessage('time_signature', numerator=4, denominator=4))
     mid.tracks.append(t0)
 
-    # 旋律: 每 4 音一小节; 句末气口 (缩短 35%)
+    # 旋律: 每 4 音一小节; 句末气口
     mel_ev = []
     n = len(midi_pitches)
-    for i, (pc, rh) in enumerate(zip(midi_pitches, rhythms)):
-        bar = i // 4
-        j = i % 4
-        t_on = bar * 4 * TPB + j * TPB
-        note_beats = MELODY_RHYTHM.get(rh, 0.5)
-        dur = min(note_beats, 1.0)
-        if chords_span and chords_span[i]['phrase_bin'] == 0 and i != n - 1:
-            dur *= 0.65
-        t_off = t_on + max(int(dur * TPB), 1)
-        if pc >= 0:
+    if render == 'rhythm':
+        is_end = [bool(i < len(chords_span) and chords_span[i]['phrase_bin'] == 0)
+                  for i in range(n)]
+        for i, onset, dur in render_melody_timing(rhythms, is_end, breath=breath):
+            pc = midi_pitches[i]
+            if pc < 0:
+                continue
+            t_on = int(round(onset * TPB))
+            t_off = t_on + max(int(round(dur * TPB)), 1)
             mel_ev.append((t_on, 'on', pc)); mel_ev.append((t_off, 'off', pc))
+    else:
+        for i, (pc, rh) in enumerate(zip(midi_pitches, rhythms)):
+            bar, j = i // 4, i % 4
+            note_beats = min(MELODY_RHYTHM.get(rh, 0.5), 1.0)
+            if chords_span and chords_span[i]['phrase_bin'] == 0 and i != n - 1:
+                note_beats *= 0.65
+            t_on = bar * 4 * TPB + j * TPB
+            t_off = t_on + max(int(round(note_beats * TPB)), 1)
+            if pc >= 0:
+                mel_ev.append((t_on, 'on', pc)); mel_ev.append((t_off, 'off', pc))
     mel = MidiTrack(); mel.append(Message('program_change', program=0, channel=0, time=0))
     last = 0
     mel_ev.sort(key=lambda e: (e[0], 0 if e[1] == 'off' else 1))
@@ -203,17 +248,23 @@ def write_midi(chords_span, midi_pitches, rhythms, out_path, bpm=76):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=None)
-    parser.add_argument('--pieces', type=int, default=1)
+    parser.add_argument('--pieces', type=int, default=1,
+                        help='生成几首 (依次取不同和声框架, 输出加 _1.._N 后缀)')
     parser.add_argument('--out', type=str, default='data/generated/sentence_piece.mid')
+    parser.add_argument('--model', type=str, default=None,
+                        help='模型权重路径 (默认 melody_diffusion_v8_chorales.pt)')
     parser.add_argument('--bpm', type=int, default=76)
     parser.add_argument('--candidates', type=int, default=3)
+    parser.add_argument('--render', choices=['rhythm', 'slot'], default='rhythm',
+                        help='rhythm=小节内按节奏比例分配 (默认); slot=旧口径每音 1 拍')
+    parser.add_argument('--breath', type=float, default=0.25, help='句末气口 (拍)')
     parser.add_argument('--mode', choices=['any', 'major', 'minor'], default='any',
                         help='框架调式过滤 (major=只要大调众赞歌)')
     args = parser.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     rng = random.Random(args.seed)
-    model = load_model(device)
+    model = load_model(device, args.model)
 
     data = json.load(open(ROOT / 'data/processed/chorales_sentences_v1.json', encoding='utf-8'))
     pool = [p for p in data if len(p['notes']) >= 32]
@@ -221,7 +272,22 @@ def main():
         pool = [p for p in pool if p['key_original'].split()[-1] == args.mode]
     if not pool:
         print(f'没有 {args.mode} 调框架可用'); return
-    piece = rng.choice(pool)
+
+    out_base = ROOT / args.out if not os.path.isabs(args.out) else Path(args.out)
+    used = set()
+    for pi in range(args.pieces):
+        cands = [p for p in pool if p['id'] not in used]
+        if not cands:
+            break
+        piece = rng.choice(cands)
+        used.add(piece['id'])
+        out = out_base if args.pieces == 1 else out_base.with_name(
+            f'{out_base.stem}_{pi + 1}{out_base.suffix}')
+        generate_piece(model, piece, rng, device, args, out)
+        print(f'→ {out}')
+
+
+def generate_piece(model, piece, rng, device, args, out):
     cond = piece_conditions(piece)
     n = len(piece['notes'])
     print(f"和声框架: {piece['title'][:40] or piece['id']} ({n} 音, "
@@ -284,9 +350,8 @@ def main():
 
     chords_span = [{'phrase_bin': cond['phrase_bin'][i], 'type': cond['type'][i],
                     'root': cond['root'][i]} for i in range(n)]
-    out = ROOT / args.out if not os.path.isabs(args.out) else Path(args.out)
-    write_midi(chords_span, midi, rhs, out, bpm=args.bpm)
-    print(f'→ {out}')
+    write_midi(chords_span, midi, rhs, out, bpm=args.bpm,
+               breath=args.breath, render=args.render)
 
 
 if __name__ == '__main__':

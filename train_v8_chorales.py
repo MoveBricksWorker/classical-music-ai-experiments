@@ -24,6 +24,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader, Subset
 import torch.optim as optim
 
+from chorale_conditions import load_chorale_windows as load_shared_windows
 from constants import F2ID_MELODY, T2ID
 from model.melody_diffusion import MelodyDiffusion, PITCH_MASK, RHYTHM_MASK, REST
 
@@ -32,59 +33,13 @@ CADENCE_ID = {'authentic': 1, 'half': 2, 'deceptive': 3, 'plagal': 4}
 
 
 def load_chorale_windows(path: str, win: int = WIN, stride: int = STRIDE):
-    pieces = json.load(open(path, encoding='utf-8'))
-    samples = []
-    for p in pieces:
-        notes = p['notes']
-        n = len(notes)
-        if n < win:
-            continue
-        # 和声条件块恒定 (4 音块多数投票), 与推理管线一致
-        # (chordify 的逐音和声 81% 每音变化, 属训练/推理不一致的旧问题)
-        fids = [F2ID_MELODY.get(notes[i]['func'], 4) for i in range(n)]
-        tids = [T2ID.get(notes[i]['type'], 0) for i in range(n)]
-        rids = [min(11, notes[i]['root']) for i in range(n)]
-        for b0 in range(0, n, 4):
-            blk = slice(b0, min(b0 + 4, n))
-            fids[b0:blk.stop] = [Counter(fids[blk]).most_common(1)[0][0]] * (blk.stop - b0)
-            tids[b0:blk.stop] = [Counter(tids[blk]).most_common(1)[0][0]] * (blk.stop - b0)
-            rids[b0:blk.stop] = [Counter(rids[blk]).most_common(1)[0][0]] * (blk.stop - b0)
-        # 每音标签
-        pos_bin, toend_bin, phrase_bin, cadence, boundary = [], [], [], [], []
-        phrase_ends = {}
-        for ph in p['phrases']:
-            phrase_ends[ph['note']] = ph['cadence']
-        prev_end = -1
-        cur_cad = CADENCE_ID.get('authentic', 1)
-        # 展开: 逐音确定所属乐句与到句末距离
-        ends = sorted(phrase_ends.keys())
-        di = 0
-        cur_end = ends[0]
-        cur_cad = CADENCE_ID.get(phrase_ends[cur_end], 1)
-        for i in range(n):
-            while i > cur_end and di + 1 < len(ends):
-                di += 1
-                cur_end = ends[di]
-                cur_cad = CADENCE_ID.get(phrase_ends[cur_end], 1)
-            phrase_bin.append(min(cur_end - i, 5))
-            cadence.append(cur_cad)
-            boundary.append(1 if i == cur_end else 0)
-            pos_bin.append(min(int(i / n * 8), 7))
-            rem = 1.0 - (i + 1) / n
-            toend_bin.append(0 if rem < 0.06 else (1 if rem < 0.15 else (2 if rem < 0.4 else 3)))
-        # 滑窗
-        for s in range(0, n - win + 1, stride):
-            e = s + win
-            samples.append({
-                'func': fids[s:e],
-                'type': tids[s:e],
-                'root': rids[s:e],
-                'pc': [min(REST, notes[i]['pc']) for i in range(s, e)],
-                'rhythm': [min(7, notes[i]['rhythm']) for i in range(s, e)],
-                'pos_bin': pos_bin[s:e], 'toend_bin': toend_bin[s:e],
-                'phrase_bin': phrase_bin[s:e], 'cadence': cadence[s:e],
-                'boundary': boundary[s:e],
-            })
+    """v8 旧口径: 条件编码见 src/chorale_conditions.py (唯一实现)。
+
+    保留末尾的全局 shuffle + 样本级 90/10 划分是为了复现 v8 的历史数字;
+    **该划分有同曲窗口泄漏 (96% 验证窗口与训练窗口同曲重叠), 新训练请用
+    train_v9_chorales.py 的按曲分组划分。**
+    """
+    samples = load_shared_windows(path, win, stride)
     random.shuffle(samples)
     return samples
 

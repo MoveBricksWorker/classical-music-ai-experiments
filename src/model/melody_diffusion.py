@@ -263,10 +263,13 @@ class MelodyDiffusion(nn.Module):
     def training_loss(self, pitch, rhythm, func, type_, root,
                       mask_frac: float | None = None, beat=None,
                       pos_bin=None, toend_bin=None, phrase_bin=None,
-                      cadence=None, boundary=None, boundary_weight: float = 0.3):
+                      cadence=None, boundary=None, boundary_weight: float = 0.3,
+                      boundary_pos_weight: float | None = None):
         """随机掩码 + 恢复损失 (仅在掩码位置计算 CE)。
 
-        mask_frac=None 时每样本独立采样 t ~ U[0.05, 0.95] (GETMusic 口径)。
+        mask_frac=None 时每样本独立采样 t ~ U(0.05, 0.95) (GETMusic 口径)。
+        boundary_pos_weight: 边界头正类权重 (句末音仅占 ~8.5%, 不加权时
+        模型倾向全判负 → 召回接近 0)。
         """
         B, L = pitch.shape
         dev = pitch.device
@@ -288,7 +291,11 @@ class MelodyDiffusion(nn.Module):
             pl, rl, bl = self.forward(p_in, r_in, func, type_, root, flag, beat,
                                       pos_bin, toend_bin, phrase_bin, cadence,
                                       return_boundary=True)
-            lb = F.cross_entropy(bl.reshape(-1, 2), boundary.reshape(-1))
+            if boundary_pos_weight is not None:
+                w = torch.tensor([1.0, boundary_pos_weight], device=dev)
+            else:
+                w = None
+            lb = F.cross_entropy(bl.reshape(-1, 2), boundary.reshape(-1), weight=w)
         else:
             pl, rl = self.forward(p_in, r_in, func, type_, root, flag, beat,
                                   pos_bin, toend_bin, phrase_bin, cadence)
@@ -399,12 +406,12 @@ class MelodyDiffusion(nn.Module):
 
         # ── 理论引导精修: 最后 scorer_steps 轮内, 对低置信位置重采样 ──
         if scorer is not None and scorer_steps > 0:
-            # 和弦音表 [L]
+            # 和弦音表 [B, L, k] (逐 batch 逐和弦, 不只处理 0 号样本)
             t_map = {0: [0, 4, 7], 1: [0, 3, 7], 2: [0, 3, 6], 3: [0, 4, 7, 10],
                      4: [0, 4, 8], 5: [0, 3, 7, 10], 6: [0, 3, 6, 9]}
-            cts_all = [[(int(root[0, i]) + iv) % 12 for iv in
-                        t_map.get(int(typ[0, i].item()), [0, 4, 7])]
-                       for i in range(L)]
+            cts_all = [[[(int(root[b, i]) + iv) % 12 for iv in
+                         t_map.get(int(typ[b, i].item()), [0, 4, 7])]
+                        for i in range(L)] for b in range(B)]
 
             for s in range(scorer_steps):
                 flag = (p != PITCH_MASK).long() * 2 + (r != RHYTHM_MASK).long()
@@ -414,19 +421,20 @@ class MelodyDiffusion(nn.Module):
 
                 # 对每个位置: 用已解码邻居做乐理评分, 重加权
                 new_p = p.clone()
-                for i in range(L):
-                    pi = p[0, i].item()
-                    if pi == PITCH_MASK or pi == REST:
-                        continue
-                    prev_pc = p[0, i - 1].item() if i > 0 and p[0, i - 1] != PITCH_MASK else pi
-                    pr = probs[0, i].clone()
-                    for cand in range(REST):  # 仅实音候选
-                        bonus = scorer(int(cand), cts_all[i], prev_pc, i)
-                        pr[cand] = pr[cand] * math.exp(bonus * 0.5)
-                    # 同音衰减: 抑制与前一音完全相同的候选 (理论引导而非事后修补)
-                    if 0 <= prev_pc < REST:
-                        pr[prev_pc] = pr[prev_pc] * repeat_damp
-                    new_p[0, i] = torch.multinomial(pr[:REST] / pr[:REST].sum(), 1)
+                for b in range(B):
+                    for i in range(L):
+                        pi = p[b, i].item()
+                        if pi == PITCH_MASK or pi == REST:
+                            continue
+                        prev_pc = p[b, i - 1].item() if i > 0 and p[b, i - 1] != PITCH_MASK else pi
+                        pr = probs[b, i].clone()
+                        for cand in range(REST):  # 仅实音候选
+                            bonus = scorer(int(cand), cts_all[b][i], prev_pc, i)
+                            pr[cand] = pr[cand] * math.exp(bonus * 0.5)
+                        # 同音衰减: 抑制与前一音完全相同的候选 (理论引导而非事后修补)
+                        if 0 <= prev_pc < REST:
+                            pr[prev_pc] = pr[prev_pc] * repeat_damp
+                        new_p[b, i] = torch.multinomial(pr[:REST] / pr[:REST].sum(), 1)
                 p = new_p
 
         return p, r
@@ -505,7 +513,7 @@ class MelodyDiffusion(nn.Module):
                 if scorer is not None and scorer_steps > 0:
                     for k, i in enumerate(idxs.tolist()):
                         pr = p_dist[k].clone()
-                        prev_pc = p[0, i - 1].item() if i > 0 and p[0, i - 1] != PITCH_MASK else int(cand_p[k])
+                        prev_pc = p[b, i - 1].item() if i > 0 and p[b, i - 1] != PITCH_MASK else int(cand_p[k])
                         for c in range(REST):
                             bonus = scorer(int(c), cts_all[i], prev_pc, i)
                             pr[c] = pr[c] * math.exp(bonus * 0.5)
@@ -654,8 +662,8 @@ if __name__ == '__main__':
     func = torch.randint(0, 7, (B, L))
     typ = torch.randint(0, 9, (B, L))
     root = torch.randint(0, 12, (B, L))
-    loss, lp, lr = m.training_loss(pitch, rhythm, func, typ, root)
-    print(f'loss={loss.item():.3f} (pitch={lp:.3f}, rhythm={lr:.3f})')
+    loss, lp, lr, lb = m.training_loss(pitch, rhythm, func, typ, root)
+    print(f'loss={loss.item():.3f} (pitch={lp:.3f}, rhythm={lr:.3f}, boundary={lb:.3f})')
 
     fc = torch.randint(0, 7, (1, 8))
     tc = torch.randint(0, 9, (1, 8))

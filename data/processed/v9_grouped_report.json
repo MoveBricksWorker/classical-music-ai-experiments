@@ -1,0 +1,130 @@
+{
+  "config": {
+    "epochs": 120,
+    "batch": 64,
+    "lr": 0.0002,
+    "d": 320,
+    "layers": 6,
+    "win": 32,
+    "stride": 6,
+    "bw": 0.5,
+    "bw_pos_weight": 5.0,
+    "struct_drop": 0.5,
+    "split": "group",
+    "folds": 1,
+    "val_ratio": 0.1,
+    "seed": 42,
+    "tag": "v9_grouped",
+    "out": null
+  },
+  "n_folds": 1,
+  "recovery_t15": {
+    "mean": 0.5248,
+    "std": 0.0,
+    "values": [
+      0.5248
+    ]
+  },
+  "recovery_t50": {
+    "mean": 0.4116,
+    "std": 0.0,
+    "values": [
+      0.4116
+    ]
+  },
+  "recovery_t85": {
+    "mean": 0.3215,
+    "std": 0.0,
+    "values": [
+      0.3215
+    ]
+  },
+  "boundary_f1_at_0.5": {
+    "mean": 0.5476,
+    "std": 0.0,
+    "values": [
+      0.5476
+    ]
+  },
+  "boundary_f1_tol1": {
+    "mean": 0.6071,
+    "std": 0.0,
+    "values": [
+      0.6071
+    ]
+  },
+  "boundary_f1_tol2": {
+    "mean": 0.631,
+    "std": 0.0,
+    "values": [
+      0.631
+    ]
+  },
+  "boundary_precision": {
+    "mean": 0.5055,
+    "std": 0.0,
+    "values": [
+      0.5055
+    ]
+  },
+  "boundary_recall": {
+    "mean": 0.5974,
+    "std": 0.0,
+    "values": [
+      0.5974
+    ]
+  },
+  "generation_acc": {
+    "mean": 0.3203,
+    "std": 0.0,
+    "values": [
+      0.3203
+    ]
+  },
+  "per_fold": [
+    {
+      "seed": 42,
+      "n_train": 1205,
+      "n_val": 141,
+      "recovery_t15": 0.5247813411078717,
+      "recovery_t50": 0.4115866839602248,
+      "recovery_t85": 0.32149386262731783,
+      "f1_sweep": {
+        "0.2": 0.512013256006628,
+        "0.3": 0.5299145299145299,
+        "0.4": 0.5538793103448275,
+        "0.5": 0.5476190476190476,
+        "0.6": 0.5158730158730158,
+        "0.7": 0.475187969924812
+      },
+      "best_threshold": "0.4",
+      "best_f1": 0.5538793103448275,
+      "f1_at_0.5": 0.5476190476190476,
+      "precision": 0.5054945054945055,
+      "recall": 0.5974025974025974,
+      "f1_tol1": 0.6071428571428572,
+      "f1_tol2": 0.630952380952381,
+      "recall_by_cadence": {
+        "authentic": {
+          "n": 305,
+          "recall": 0.6262295246124268
+        },
+        "half": {
+          "n": 9,
+          "recall": 0.4444444477558136
+        },
+        "deceptive": {
+          "n": 57,
+          "recall": 0.5263158082962036
+        },
+        "plagal": {
+          "n": 14,
+          "recall": 0.3571428656578064
+        }
+      },
+      "generation_acc": 0.3203125,
+      "train_seconds": 167.6,
+      "fold": 0
+    }
+  ]
+}

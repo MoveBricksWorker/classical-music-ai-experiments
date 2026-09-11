@@ -12,7 +12,8 @@
 17 维特征 (透明可解释):
     12 维 pitch-class 直方图 (归一化, 休止不计数)
     + 平均时值 (beat) + 每拍音符密度 + 平均音程 (半音)
-    + step ratio (≤2) + leap ratio (≥7)
+    + step ratio (≤2) + leap ratio (≥5; 音级空间最大距离为 6,
+      MusicAIR 的 ≥7 在 pc 空间恒为 0, 已按项目口径下调, 见 04 报告)
 """
 from __future__ import annotations
 

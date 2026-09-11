@@ -95,11 +95,20 @@ DIFFUSION_KW = dict(d=288, h=8, L=8, max_len=256,
 
 
 def load_diffusion_model(device: str):
-    """加载非自回归扩散旋律模型 (GETMusic 式 D3PM)。"""
+    """加载非自回归扩散旋律模型 (GETMusic 式 D3PM)。
+
+    注意: v7 检查点里没有 `boundary_head`（边界预测头是 v8 才加的辅助头），
+    旧管线也不调用它 —— 因此这里用 strict=False 并显式打印缺失/多余参数，
+    避免"静默加载半个模型"。
+    """
     m = MelodyDiffusion(num_funcs=len(F2ID_MELODY), num_types=len(T2ID),
                         **DIFFUSION_KW).to(device)
-    m.load_state_dict(torch.load(DIFFUSION_PT, map_location=device, weights_only=True),
-                      strict=True)
+    sd = torch.load(DIFFUSION_PT, map_location=device, weights_only=True)
+    missing, unexpected = m.load_state_dict(sd, strict=False)
+    if missing:
+        print(f'[load_diffusion_model] 缺失参数 (按未训练初始化): {list(missing)}')
+    if unexpected:
+        print(f'[load_diffusion_model] 多余参数 (忽略): {list(unexpected)}')
     m.eval()
     return m
 

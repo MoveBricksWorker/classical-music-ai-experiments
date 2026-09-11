@@ -1,0 +1,37 @@
+{
+  "n_train": 684,
+  "n_held_same_piece": 521,
+  "n_unseen_piece": 141,
+  "held_same_piece": {
+    "recovery_t15": 0.866938775510204,
+    "recovery_t50": 0.8026205072725087,
+    "recovery_t85": 0.7257245080500895,
+    "b_best_threshold": "0.4",
+    "b_best_f1": 0.7383419689119172,
+    "b_f1_at_0.5": 0.732905982905983,
+    "b_precision": 0.7639198218262806,
+    "b_recall": 0.704312114989733,
+    "b_f1_tol1": 0.7450142450142452,
+    "b_f1_tol2": 0.7542735042735044,
+    "generation_acc": 0.7024739583333334
+  },
+  "unseen_piece": {
+    "recovery_t15": 0.532258064516129,
+    "recovery_t50": 0.4124775583482944,
+    "recovery_t85": 0.3207253886010363,
+    "b_best_threshold": "0.2",
+    "b_best_f1": 0.5500526870389884,
+    "b_f1_at_0.5": 0.48664688427299707,
+    "b_precision": 0.5674740484429066,
+    "b_recall": 0.42597402597402595,
+    "b_f1_tol1": 0.5281899109792284,
+    "b_f1_tol2": 0.5548961424332344,
+    "generation_acc": 0.3255208333333333
+  },
+  "inflation": {
+    "recovery_t15": 0.3347,
+    "recovery_t50": 0.3901,
+    "recovery_t85": 0.405,
+    "generation_acc": 0.377
+  }
+}

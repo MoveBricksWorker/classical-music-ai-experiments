@@ -96,23 +96,29 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--n', type=int, default=8)
     parser.add_argument('--bpm', type=int, default=92)
+    parser.add_argument('--midi', type=str, nargs='*', default=None,
+                        help='直接评估给定 MIDI (渲染后口径); 缺省时用 gen_standalone 现场生成')
     args = parser.parse_args()
 
     ref = corpus_reference()
     print(f"人类语料参照 (n={ref['n']}): 末音=主音 {ref['tonic_end']*100:.0f}% | "
           f"末音长音 {ref['long_end']*100:.0f}% | 末3音含解决 {ref['cad_like']*100:.0f}%")
 
-    # 生成 n 首 (独立生成器, 与管线同后处理)
-    import subprocess
-    paths = []
-    for i in range(args.n):
-        out = ROOT / f'data/generated/_endtest_{i}.mid'
-        r = subprocess.run([sys.executable, str(ROOT / 'gen_standalone.py'),
+    if args.midi:
+        paths = [Path(p) for p in args.midi]
+        paths = [p if p.is_absolute() else ROOT / p for p in paths]
+    else:
+        # 生成 n 首 (独立生成器, 与管线同后处理)
+        import subprocess
+        paths = []
+        for i in range(args.n):
+            out = ROOT / f'data/generated/_endtest_{i}.mid'
+            subprocess.run([sys.executable, str(ROOT / 'gen_standalone.py'),
                             '--seed', str(100 + i), '--chords', '24',
                             '--bpm', str(args.bpm), '--out', str(out)],
                            capture_output=True, text=True)
-        if out.exists():
-            paths.append(out)
+            if out.exists():
+                paths.append(out)
     gen = gen_reference(paths)
     print(f"生成曲 (n={gen['n']}):    末音=检测主音 {gen['tonic_end']*100:.0f}% | "
           f"末音=C(目标) {gen['target_tonic']*100:.0f}% | "

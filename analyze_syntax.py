@@ -1,6 +1,10 @@
 """
 句法评估指标 (步骤 5) —— 量化"模型是否理解句子"。
 
+⚠️ **本脚本保留旧的样本级随机划分（同曲窗口重叠 81% → 96% 验证窗口泄漏），
+仅用于与历史数字对比。诚实口径（按曲分组 + 5 折 + 配对人类基线 + 防模仿）
+请用 `evaluate_chorale_model.py`，结论见 `05-评估修订报告.md`。**
+
 指标:
     1. 边界 F1      : 给定真实旋律 (遮蔽结构流), 模型预测乐句末的 P/R/F1;
     2. 终止式实现率  : 生成旋律在计划到达点上的和弦音吻合率
@@ -83,6 +87,8 @@ def main():
     args = parser.parse_args()
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     random.seed(42); torch.manual_seed(42)      # 固定数据划分/生成种子
+    print('⚠️ 旧口径（样本级随机划分, 有同曲窗口泄漏）—— 诚实口径见 '
+          'evaluate_chorale_model.py')
 
     model = load_model(device)
     data = json.load(open(ROOT / 'data/processed/chorales_sentences_v1.json', encoding='utf-8'))

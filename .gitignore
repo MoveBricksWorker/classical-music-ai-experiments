@@ -230,3 +230,10 @@ data/processed/*_fulltext.txt
 
 # ==== 模型权重走 Releases, 不进仓库 ====
 melody_diffusion_v*.pt
+
+# ==== 测试/临时产物 ====
+data/generated/_*.mid
+
+# ==== 消融/演示脚本的临时产物 ====
+data/generated/sample_*.mid
+data/generated/resample_*.mid
