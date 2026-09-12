@@ -10,13 +10,13 @@
     "n_pieces": 368
   },
   "v14(新)": {
-    "step_ratio": 0.623015873015873,
-    "avg_interval": 2.4285714285714284,
-    "direction_change": 0.7339759777259777,
-    "range_span": 13.25,
-    "onset_density": 1.7033673469387756,
-    "last_note_tonic": 0.25,
-    "phrase_end_stable": 0.1875,
-    "n_generated": 4
+    "step_ratio": 0.6957671957671958,
+    "avg_interval": 3.185185185185185,
+    "direction_change": 0.6654240885972929,
+    "range_span": 27.833333333333332,
+    "onset_density": 2.018018018018018,
+    "last_note_tonic": 0.5,
+    "phrase_end_stable": 0.375,
+    "n_generated": 6
   }
 }
