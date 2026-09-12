@@ -292,7 +292,8 @@ def eval_recovery(model, loader, device, mode='random'):
     """掩码恢复准确率（三种模式各测一次，衡量通用能力）。"""
     model.eval()
     out = {}
-    for m in ('harmonize', 'infill', 'random'):
+    n_voices = next(iter(loader))[0].shape[1]
+    for m in (('harmonize', 'infill', 'random') if n_voices >= 2 else ('infill', 'random')):
         cor = tot = cor_r = tot_r = 0
         for bi, b in enumerate(loader):
             if bi >= 6:
@@ -300,6 +301,8 @@ def eval_recovery(model, loader, device, mode='random'):
             keys = WindowDataset.KEYS
             cond = {k: b[keys.index(k)].to(device) for k in keys}
             pitch = cond.pop('pitch'); rhythm = cond.pop('rhythm')
+            if model.V < pitch.shape[1]:          # 单声部模型: 只取前 V 个声部
+                pitch = pitch[:, :model.V]; rhythm = rhythm[:, :model.V]
             torch.manual_seed(0)
             known = model.sample_mask(pitch.shape[0], pitch.shape[1], pitch.shape[2],
                                       m, pitch.device)
@@ -367,6 +370,8 @@ def write_satb_midi(path, gen_pitch, gen_rhythm, offs, vocab, bpm=76,
 @torch.no_grad()
 def export_samples(model, windows, device, out_dir: Path, n=3, seed=0, bpm=76):
     """导出"给 Soprano 配四声部"的成品：生成版 + 真值版，便于 A/B 试听。"""
+    if model.V < 2 or n <= 0:
+        return []
     model.eval()
     rng = random.Random(seed)
     pool = [w for w in windows if w['pitch'].shape[1] >= 16]
@@ -413,6 +418,12 @@ def main():
     ap.add_argument('--tag', type=str, default='v10')
     ap.add_argument('--palestrina-max', type=int, default=0,
                     help='>0 时把 Palestrina 窗口下采样到该数量（平衡混合实验）')
+    ap.add_argument('--solo-voice', type=int, default=-1,
+                    help='>=0 时只训练该声部（0=Soprano）→ 旋律生成模型')
+    ap.add_argument('--w-harm', type=float, default=0.35, help='配和声掩码占比')
+    ap.add_argument('--w-scratch', type=float, default=0.15, help='从零生成(全掩码)占比')
+    ap.add_argument('--harmony-drop', type=float, default=0.0,
+                    help='按此概率把整窗的和声条件置为"未知"（让模型学会自己定和声）')
     ap.add_argument('--vl-weight', type=float, default=0.0,
                     help='声部进行（平行五/八度）辅助损失权重')
     ap.add_argument('--patience', type=int, default=0,
@@ -462,7 +473,15 @@ def main():
     print(f'窗口: 训练 {len(tr_w)} / 验证 {len(vl_w)} ({len(val_ids)} 首曲) | '
           f'序列长 {args.win} | 移调增广 ±{args.aug_transpose}')
 
-    model = SATBDiffusion(d=args.d, h=args.heads, layers=args.layers, vocab=vocab).to(device)
+    n_voices = 1 if args.solo_voice >= 0 else 4
+    model = SATBDiffusion(d=args.d, h=args.heads, layers=args.layers, vocab=vocab,
+                          n_voices=n_voices).to(device)
+    if args.solo_voice >= 0:
+        args.w_harm = 0.0                      # 只有一个声部, 没有"配和声"任务
+    rest = max(0.0, 1.0 - args.w_harm - args.w_scratch)
+    model.mask_weights = [args.w_harm, rest / 2, rest / 2, args.w_scratch]
+    print(f'掩码权重 [配和声 {model.mask_weights[0]:.2f} / 续写 {model.mask_weights[1]:.2f} / '
+          f'随机 {model.mask_weights[2]:.2f} / 从零 {model.mask_weights[3]:.2f}]')
     n_par = sum(p.numel() for p in model.parameters())
     print(f'参数量 {n_par / 1e6:.1f}M | 设备 {device}')
     tr = DataLoader(WindowDataset(tr_w), batch_size=args.batch, shuffle=True, drop_last=True)
@@ -480,6 +499,14 @@ def main():
         for b in tr:
             cond = {k: b[keys.index(k)].to(device) for k in keys}
             pitch = cond.pop('pitch'); rhythm = cond.pop('rhythm')
+            if args.solo_voice >= 0:
+                v = args.solo_voice
+                pitch = pitch[:, v:v + 1]; rhythm = rhythm[:, v:v + 1]
+            if args.harmony_drop > 0 and random.random() < args.harmony_drop:
+                # 整窗和声条件 → 未知 (func=7/type=9/root=12, 与模型里的 unk 一致)
+                cond['func'] = torch.full_like(cond['func'], 7)
+                cond['type'] = torch.full_like(cond['type'], 9)
+                cond['root'] = torch.full_like(cond['root'], 12)
             opt.zero_grad()
             loss, lp, lr_, n_tgt = model.training_loss(pitch, rhythm, cond, mode='mixed',
                                                        vl_weight=args.vl_weight)
@@ -490,12 +517,20 @@ def main():
         sched.step()
         if (ep + 1) % max(1, args.epochs // 10) == 0 or ep == args.epochs - 1:
             rec = eval_recovery(model, vl, device)
-            harm = eval_harmonize(model, vl_w, device, n=args.eval_n)
-            score = (harm.get('harm_pitch_acc_chorale', harm['harm_pitch_acc_masked'])
-                     + 0.3 * rec['rec_pitch_random'])
+            if model.V >= 2:                       # 配和声评估需要 ≥2 个声部
+                harm = eval_harmonize(model, vl_w, device, n=args.eval_n)
+            else:
+                harm = {'harm_pitch_acc_chorale': 0.0, 'harm_rhythm_acc_chorale': 0.0,
+                        'parallel_5_per100': 0.0, 'ref_parallel_5_per100': 0.0,
+                        'crossing_per100': 0.0, 'ref_crossing_per100': 0.0,
+                        'spacing_per100': 0.0, 'harm_pitch_acc_masked': 0.0,
+                        'harm_rhythm_acc': 0.0, 'per_voice_pitch_acc': {}}
+            score = ((harm.get('harm_pitch_acc_chorale', harm['harm_pitch_acc_masked'])
+                      + 0.3 * rec['rec_pitch_random']) if model.V >= 2
+                     else rec['rec_pitch_infill'] + 0.3 * rec['rec_pitch_random'])
             line = (f'Ep{ep + 1:4d} | loss {tot / max(nb, 1):.4f} | '
                     f'vl {args.vl_weight:g} | '
-                    f'rec(harm/infill/rand) {rec["rec_pitch_harmonize"]:.3f}/'
+                    f'rec(infill/rand) '
                     f'{rec["rec_pitch_infill"]:.3f}/{rec["rec_pitch_random"]:.3f} | '
                     f'配和声(众赞歌) 音高 {harm.get("harm_pitch_acc_chorale", 0):.3f} '
                     f'节奏 {harm.get("harm_rhythm_acc_chorale", 0):.3f} | '

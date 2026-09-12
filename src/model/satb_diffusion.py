@@ -113,6 +113,8 @@ class SATBDiffusion(nn.Module):
         self.cadence_emb = nn.Embedding(num_cadence_types + 1, d)
         self.style_emb = nn.Embedding(num_styles, d)
 
+        # 掩码模式权重 [harmonize, infill, random, scratch]（训练脚本可覆盖）
+        self.mask_weights = [0.35, 0.25, 0.25, 0.15]
         self.drop = nn.Dropout(dropout)
         if use_rope:
             self.encoder = RotaryEncoder(d, h, layers, dropout=dropout, max_len=1024)
@@ -234,11 +236,14 @@ class SATBDiffusion(nn.Module):
         for b in range(B):
             m = mode
             if m == 'mixed':
-                m = random.choices(['harmonize', 'infill', 'random'],
-                                   weights=[0.4, 0.3, 0.3])[0]
-            if m == 'harmonize':
+                # 四档: 配和声 / 续写 / 随机挖 / **从零生成**(全挖)
+                m = random.choices(['harmonize', 'infill', 'random', 'scratch'],
+                                   weights=self.mask_weights)[0]
+            if m == 'scratch':
+                pass                                   # 全 False = 什么都没有, 从零写
+            elif m == 'harmonize' and V >= 2:
                 keep = {0} if random.random() < 0.7 else set()
-                keep |= set(random.sample([1, 2, 3], k=random.choice([0, 1])))
+                keep |= set(random.sample(list(range(1, V)), k=random.choice([0, 1])))
                 for v in keep:
                     known[b, v] = True
             elif m == 'infill':
@@ -246,7 +251,7 @@ class SATBDiffusion(nn.Module):
                 s = random.randint(0, max(0, T - w))
                 known[b, :, :] = True
                 known[b, :, s:s + w] = False
-            else:
+            else:                                       # random / 单声部时的 harmonize 回退
                 t = random.uniform(0.1, 0.9)
                 known[b] = torch.rand(V, T, device=dev) >= t
                 if bool(known[b].all()):
