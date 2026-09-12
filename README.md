@@ -576,3 +576,67 @@ v16 的成绩"，0.56 任何配置下都测不出）。
 **模型没变，尺子变准了**：唯一被推翻的结论是"规划器和声解决了散"，
 唯一被救回来的是"评分引导"（音域异常是 bug）；旋律"能填空不能作曲"的
 判断在修正后的数字上依然成立，而且现在每一项都能指到产物和配置。
+
+---
+
+# 🎧 迭代 12：成品缺旋律的修复与时间网格（2026-09-12 第四轮）
+
+> 触发：把成品渲染成音频试听。此前所有指标都从 **pitch 数组**计算、不经过 MIDI，
+> 所以下面两个问题逃过了全部评估。完整记录见 `09-审查与修复记录.md` §九。
+
+## 12.1 端到端成品 MIDI 里没有旋律
+
+`gen_full_pipeline.realize()` 丢弃了旋律模型返回的节奏流（`sop, _sop_r = gen_melody(...)`），
+Soprano 声部的时值全程停在 `HOLD`，而 `write_midi` 对 `r >= HOLD` 的切片一律 `continue`
+→ **整条旋律一个音都没写进 MIDI**。修复前 `full_1.mid` 只有 3 个声部（28/35/39 音），
+ch0 只有一个 `program_change`；本轮之前落盘的 `full_*.mid` 同样如此（非本轮引入）。
+修复后四声部齐全（S 37 / A 46 / T 52 / B 52），音域 S 67–81 / A 62–79 / T 60–74 / B 41–68。
+
+## 12.2 时间网格：1 切片 ≠ 1 拍
+
+语料建切片的方式是**按"任一 voice 的起音"切**，切片时长 `dur` = 到下一个起音的拍数，
+**均值 0.66 拍（中位数 0.5）**；节奏 token 就是这个时长的量化档。旧口径按
+"1 切片 = 1 拍"渲染，等于把音乐**拉伸 1.51 倍**，且每个音只占其切片时长的 66%，
+剩余时间全部成为静音。从 MIDI 事件层实测发声占比（16 分音符采样）：
+
+| 文件 | 总发声 | S / A / T / B |
+|------|--------|---------------|
+| `satb_chorale_6_ref`（真巴赫） | 1.00 | 0.79 / 0.84 / 0.82 / 0.86 |
+| `satb_chorale_6_gen`（真旋律+真和声） | 0.84 | 0.79 / 0.73 / 0.72 / 0.71 |
+| `full_1`（旧网格） | **0.52** | 0.33 / 0.38 / 0.45 / 0.45 |
+| `full_1`（`--grid model`，同一份生成结果） | **1.00** | 0.62 / 0.73 / 0.86 / 0.85 |
+
+→ **"散"不是模型写出来的，是渲染网格造成的**：同一批生成结果换网格后与真巴赫持平。
+新增 `--grid {beat,model}`（**默认仍为 `beat`**，不改动历史口径）；
+`model` 用 `model_grid_offs()` 按各声部预测时值的中位数铺时间轴。
+
+## 12.3 试听工具（新增）
+
+| 文件 | 用途 |
+|------|------|
+| `render_audio.py` | MIDI → WAV/MP3（本机无软音源，加法合成 + 轻混响），供盲听对照 |
+| `play_midi.py` | 用 music21 实时播放 MIDI（补了 pygame 2.6 移除 `pygame.exceptions` 的兼容层；直接写 `StreamPlayer(...).play()` 会误报"requires pygame"） |
+
+```bash
+# 端到端成品（新网格）+ 可播放音频
+python gen_full_pipeline.py --n 5 --bars 16 --seed 7 --grid model --out-dir data/generated/full_modelgrid
+python render_audio.py data/generated/full_modelgrid/*.mid --mp3
+python play_midi.py            # 听 MIDI：认准 full_modelgrid/，不要听 full/ 里的旧网格
+```
+
+## 12.4 权重（Releases: model-v13）
+
+流水线所需的四个权重 + 对比实现器已传到
+[**`model-v13`**](https://github.com/MoveBricksWorker/classical-music-ai-experiments/releases/tag/model-v13)：
+`v13_melody.pt`（旋律，无和声条件）· `v16_mel_harm.pt`（旋律，真和声锚定）·
+`harmony_planner_mel.pt`（和声规划器）· `v11_scratch.pt`（四声部实现器，流水线现役）·
+`v10_aug_vl20.pt`（对比实现器，复现审查报告的三条件对照用）。
+
+> ⚠️ `v13_melody.pt` / `v16_mel_harm.pt` 的训练命令在云端未落盘，是孤本；
+> 建议补一次重训并写报告（见 09 §七）。
+
+## 12.5 一句话
+
+**模型没变，这次坏的是管线和渲染**：成品里没有旋律是代码 bug，听感"散"是时间网格；
+修完之后端到端的发声密度与真巴赫持平，旋律仍是天花板，但天花板比之前看到的更高。
+

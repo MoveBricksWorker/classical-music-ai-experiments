@@ -250,3 +250,6 @@ v10*.pt
 # ==== v13 / 规划器权重 ====
 v1[0-9]*.pt
 harmony_planner*.pt
+
+# ==== 听测音频渲染 (render_audio.py 的产物, 可再生成) ====
+data/generated/audio*/

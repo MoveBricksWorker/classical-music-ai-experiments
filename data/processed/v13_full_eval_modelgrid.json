@@ -11,7 +11,8 @@
     "bars": 16,
     "seed": 7,
     "bpm": 76,
-    "out_dir": "data/generated/full",
+    "grid": "model",
+    "out_dir": "data/generated/full_modelgrid",
     "n_generated": 5
   },
   "generated": {

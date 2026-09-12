@@ -78,17 +78,45 @@ def plan_harmony(planner, cond, sop, T, device, seed=0, temp=0.9):
 
 
 @torch.no_grad()
-def realize(realizer, cond, sop, T, device, seed=0, temp=0.85):
-    """③ 以旋律+规划的和声为条件，生成其余三个声部。"""
+def realize(realizer, cond, sop, T, device, seed=0, temp=0.85, sop_r=None):
+    """③ 以旋律+规划的和声为条件，生成其余三个声部。
+
+    `sop_r` 必须传旋律模型的节奏流：Soprano 的时值只存在于这个头里，
+    只给音高会让所有切片都停在 HOLD，`write_midi` 遂把整条旋律全部跳过。
+    """
     pitch = torch.full((1, N_VOICES, T), VOCAB.rest, dtype=torch.long, device=device)
     rhythm = torch.full((1, N_VOICES, T), HOLD, dtype=torch.long, device=device)
     pitch[0, 0] = sop                       # Soprano 作为已知上下文
+    if sop_r is not None:
+        rhythm[0, 0] = sop_r
     known = torch.zeros((1, N_VOICES, T), dtype=torch.bool, device=device)
     known[:, 0] = True
     torch.manual_seed(seed)
     gp, gr = realizer.generate(pitch, rhythm, known, cond, steps=1,
                                argmax=True, temp=temp)
     return gp[0], gr[0]
+
+
+def model_grid_offs(rhythm, pitch, vocab):
+    """按**模型自己预测的切片时长**铺时间轴（`--grid model`）。
+
+    训练语料里每个切片是一个"起音事件"，`dur` = 到下一个任意声部起音的拍数，
+    平均 0.66 拍（中位数 0.5）；节奏 token 正是这个时长的量化档。所以
+    "1 切片 = 1 拍"会把音乐拉伸约 1.5 倍，并让每个音只占其切片的一部分，
+    剩余时间全部成为静音。这里改成：有起音的切片取各声部预测时值的中位数，
+    全是 HOLD 的切片长度记 0（语料里不存在这种切片）。
+    """
+    from train_v10_satb import RHYTHM_VALUES as RV
+    T = rhythm.shape[1]
+    offs, acc = [], 0.0
+    for t in range(T):
+        bins = [RV[min(int(rhythm[v, t]), 7)] for v in range(rhythm.shape[0])
+                if int(rhythm[v, t]) < HOLD and int(pitch[v, t]) < vocab.n_pitch]
+        offs.append(acc)
+        if bins:
+            bins.sort()
+            acc += bins[len(bins) // 2]
+    return offs
 
 
 def main():
@@ -104,6 +132,9 @@ def main():
     ap.add_argument('--bars', type=int, default=16)
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--bpm', type=int, default=76)
+    ap.add_argument('--grid', choices=['beat', 'model'], default='beat',
+                    help='时间网格: beat=1 切片 1 拍（旧口径，默认）; '
+                         'model=按模型预测的切片时长（与训练语料一致，见 model_grid_offs）')
     ap.add_argument('--out-dir', type=str, default='data/generated/full')
     args = ap.parse_args()
 
@@ -126,16 +157,18 @@ def main():
     gens, ends_all = [], []
     for i in range(args.n):
         cond, ends = build_plan(T, VOCAB, device)
-        sop, _sop_r = gen_melody(mel, cond, T, device, seed=args.seed + i)
+        sop, sop_r = gen_melody(mel, cond, T, device, seed=args.seed + i)
         cond = plan_harmony(planner, cond, sop, T, device, seed=args.seed + i)
-        pitch, rhythm = realize(rz, cond, sop, T, device, seed=args.seed + i)
+        pitch, rhythm = realize(rz, cond, sop, T, device, seed=args.seed + i, sop_r=sop_r)
         gens.append((pitch.cpu(), rhythm.cpu()))
         ends_all.append(ends)
-        offs = [float(t) for t in range(T)]
+        offs = model_grid_offs(rhythm, pitch, VOCAB) if args.grid == 'model' \
+            else [float(t) for t in range(T)]
         f = out_dir / f'full_{i + 1}.mid'
         write_midi(f, pitch.cpu(), rhythm.cpu(), offs, VOCAB, args.bpm)
         roots = [int(x) for x in cond['root'][0].cpu().tolist()]
-        print(f'  第{i + 1}首 → {f.name} | 和声根音序列(前 16): {roots[:16]}')
+        print(f'  第{i + 1}首 → {f.name} | 时长 {offs[-1]:.0f} 拍 | '
+              f'和声根音序列(前 16): {roots[:16]}')
 
     ref = corpus_reference()
     res = evaluate_generated(gens, ends_all, ref)
@@ -151,11 +184,14 @@ def main():
                      ('crossing_per100', '声部交越/100 对'),
                      ('spacing_per100', '间距>八度/100 对')):
         print(f'{label:32s} {res.get(k, float("nan")):10.3f} {ref.get(k, float("nan")):10.3f}')
+    out_json = ROOT / 'data/processed' / (
+        'v13_full_eval.json' if args.grid == 'beat'
+        else f'v13_full_eval_{args.grid}grid.json')
     json.dump({'config': {**vars(args), 'n_generated': len(gens)},
                'generated': res, 'reference': ref},
-              open(ROOT / 'data/processed/v13_full_eval.json', 'w', encoding='utf-8'),
+              open(out_json, 'w', encoding='utf-8'),
               ensure_ascii=False, indent=2)
-    print(f'→ {out_dir} 与 data/processed/v13_full_eval.json')
+    print(f'→ {out_dir} 与 {out_json.relative_to(ROOT)}')
 
 
 if __name__ == '__main__':
