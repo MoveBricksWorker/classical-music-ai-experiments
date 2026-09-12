@@ -1,0 +1,22 @@
+{
+  "corpus": {
+    "step_ratio": 0.9106752346667564,
+    "avg_interval": 1.1249200955489016,
+    "direction_change": 0.45097424972048217,
+    "range_span": 11.782608695652174,
+    "onset_density": 1.334431916464947,
+    "last_note_tonic": 0.8396739130434783,
+    "phrase_end_stable": 0.5068407960199005,
+    "n_pieces": 368
+  },
+  "v14(新)": {
+    "step_ratio": 0.623015873015873,
+    "avg_interval": 2.4285714285714284,
+    "direction_change": 0.7339759777259777,
+    "range_span": 13.25,
+    "onset_density": 1.7033673469387756,
+    "last_note_tonic": 0.25,
+    "phrase_end_stable": 0.1875,
+    "n_generated": 4
+  }
+}

@@ -114,11 +114,17 @@ def piece_to_window(piece: dict, vocab: SatbVocab, ws: int, we: int, trans: int 
                           'dim7': 6, 'REST': 7}.get(s.get('type') or 'M', 0)
                 root[t] = min(11, s.get('root') or 0)
     # 乐句流: 距本句末切片数（0=句末），封顶 5；6 = 未知
+    # ⚠️ Palestrina 的"乐段"是按固定窗口切的（各声部轮流呼吸，很少同时休止），
+    #    对旋律模型是**无意义的假标签** —— 喂它会让模型学会"忽略乐句/终止式条件"，
+    #    从而把众赞歌的终止式信号一起丢掉（实测 v14 比 v13 更差就是这个原因）。
+    #    按项目铁律：没有意义的条件标成**未知**，而不是喂假值。
     phrase_bin = np.full(T, 6, dtype=np.int64)
     cadence = np.zeros(T, dtype=np.int64)
     ends = [ph['end_slice'] for ph in piece['phrases']]
+    if piece.get('style') == 'palestrina':
+        ends = []                      # 结构未知（但窗口保留, 只是没有乐句/终止式条件）
     cads = [CADENCE_ID.get(ph.get('cadence') or 'authentic', 1) for ph in piece['phrases']]
-    for t in range(T):
+    for t in range(T if ends else 0):
         gi = base + t
         nxt = next((k for k, e in enumerate(ends) if e >= gi), len(ends) - 1)
         phrase_bin[t] = min(max(0, ends[nxt] - gi), 5)
