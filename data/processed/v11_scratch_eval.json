@@ -1,0 +1,42 @@
+{
+  "generated": {
+    "key_conf_chorale": 0.29990252788056593,
+    "chord_explainable": 0.31875,
+    "cadence_bass_on_tonic_or_dom": 0.0,
+    "parallel_5_per100": 0.848356309650053,
+    "parallel_8_per100": 0.3181336161187699,
+    "crossing_per100": 5.1961823966065745,
+    "spacing_per100": 2.863202545068929,
+    "ref": {
+      "key_conf_chorale": 0.5027388560424448,
+      "chord_explainable": 0.8559893670044858,
+      "parallel_5_per100": 0.030309493606941997,
+      "parallel_8_per100": 0.004490295349176592,
+      "crossing_per100": 0.84978839483167,
+      "spacing_per100": 0.5410805895757793,
+      "simaa_soprano": {
+        "SIMAA@90": 0.0,
+        "SIMAA@95": 0.0
+      }
+    }
+  },
+  "reference": {
+    "key_conf_chorale": 0.5027388560424448,
+    "chord_explainable": 0.8559893670044858,
+    "parallel_5_per100": 0.030309493606941997,
+    "parallel_8_per100": 0.004490295349176592,
+    "crossing_per100": 0.84978839483167,
+    "spacing_per100": 0.5410805895757793,
+    "simaa_soprano": {
+      "SIMAA@90": 0.0,
+      "SIMAA@95": 0.0
+    }
+  },
+  "files": [
+    "v11_scratch_1.mid",
+    "v11_scratch_2.mid",
+    "v11_scratch_3.mid",
+    "v11_scratch_4.mid",
+    "v11_scratch_5.mid"
+  ]
+}

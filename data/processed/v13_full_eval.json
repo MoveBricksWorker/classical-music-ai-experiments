@@ -1,0 +1,35 @@
+{
+  "generated": {
+    "key_conf_chorale": 0.15198710719395178,
+    "chord_explainable": 0.78125,
+    "cadence_bass_on_tonic_or_dom": 0.55,
+    "parallel_5_per100": 1.384451544195953,
+    "parallel_8_per100": 2.3429179978700745,
+    "crossing_per100": 2.768903088391906,
+    "spacing_per100": 0.6389776357827476,
+    "ref": {
+      "key_conf_chorale": 0.5027388560424448,
+      "chord_explainable": 0.8559893670044858,
+      "parallel_5_per100": 0.030309493606941997,
+      "parallel_8_per100": 0.004490295349176592,
+      "crossing_per100": 0.84978839483167,
+      "spacing_per100": 0.5410805895757793,
+      "simaa_soprano": {
+        "SIMAA@90": 0.0,
+        "SIMAA@95": 0.0
+      }
+    }
+  },
+  "reference": {
+    "key_conf_chorale": 0.5027388560424448,
+    "chord_explainable": 0.8559893670044858,
+    "parallel_5_per100": 0.030309493606941997,
+    "parallel_8_per100": 0.004490295349176592,
+    "crossing_per100": 0.84978839483167,
+    "spacing_per100": 0.5410805895757793,
+    "simaa_soprano": {
+      "SIMAA@90": 0.0,
+      "SIMAA@95": 0.0
+    }
+  }
+}

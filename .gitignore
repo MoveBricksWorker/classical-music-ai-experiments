@@ -246,3 +246,7 @@ data/processed/v4_full.mid
 
 # ==== v10 权重 ====
 v10*.pt
+
+# ==== v13 / 规划器权重 ====
+v1[0-9]*.pt
+harmony_planner*.pt
