@@ -43,7 +43,8 @@ from metrics.theory_metrics import key_confidence
 from model.satb_diffusion import N_VOICES, SATBDiffusion, SatbVocab, voiceleading_metrics
 from gen_satb import write_midi
 from train_v10_satb import COND_KEYS, DATA, HOLD, RHYTHM_VALUES, VOICE_NAMES
-from train_harmony_planner import HarmonyPlanner, N_FUNC, N_TYPE, N_ROOT
+from train_harmony_planner import (N_FUNC_LABEL, N_TYPE_LABEL, HarmonyPlanner,
+                                   sample_plan_token)
 
 VOCAB = SatbVocab()
 CHORD_TEMPLATES = []
@@ -63,10 +64,9 @@ def plan_harmony(planner, cond, T, device, seed=0):
     for i in range(T):
         c = {k: cond[k][:, i:i + 1] for k in cond}
         lf, lt, lr = planner(c, pf, pt, pr)
-        f = int(torch.multinomial(F.softmax(lf[0, -1] / 0.9, -1), 1))
-        t_ = int(torch.multinomial(F.softmax(lt[0, -1] / 0.9, -1), 1))
-        r = int(torch.multinomial(F.softmax(lr[0, -1] / 0.9, -1), 1))
-        fs.append(min(f, N_FUNC - 2)); ts.append(min(t_, N_TYPE - 2)); rs.append(min(r, 11))
+        fs.append(sample_plan_token(lf[0, -1], N_FUNC_LABEL))
+        ts.append(sample_plan_token(lt[0, -1], N_TYPE_LABEL))
+        rs.append(sample_plan_token(lr[0, -1], 12))                # root 0-11
         pf = torch.cat([pf, torch.tensor([[fs[-1]]], device=device)], 1)
         pt = torch.cat([pt, torch.tensor([[ts[-1]]], device=device)], 1)
         pr = torch.cat([pr, torch.tensor([[rs[-1]]], device=device)], 1)
@@ -113,9 +113,41 @@ def chord_explainable(pcs: list[int]) -> bool:
     return any(s <= t for t in CHORD_TEMPLATES)
 
 
+def _key_stats(pcs_per_piece: list[list[int]]) -> dict:
+    """逐曲调性判定 → 四个口径（避免只报一个有符号均值）。
+
+    只看**主音**是否为 C（`k['key'].split()[0] == 'C'`）—— 旧写法用
+    `startswith('C')` 会把 `C# major/minor`（差半音）也算成"在 C 调"。
+    `key_conf_chorale` 保留为有符号 C 度（与旧报告可比），
+    但它的绝对值会被"几首跑到了 G/属调"主导，读的时候必须配
+    `key_c_ratio`（落在 C 的比例）与 `key_conf_abs_mean`（调性有多明确）一起看。
+    """
+    confs, keys = [], []
+    for pcs in pcs_per_piece:
+        if not pcs:
+            continue
+        hist = np.zeros(12)
+        for pc in pcs:
+            hist[pc] += 1
+        k = key_confidence(hist)
+        confs.append(k['confidence'])
+        keys.append(k['key'])
+    if not confs:
+        return {'key_conf_chorale': 0.0, 'key_c_ratio': 0.0,
+                'key_conf_abs_mean': 0.0, 'key_dist': {}}
+    is_c = [k.split()[0] == 'C' for k in keys]
+    signed = [cf if c else -cf for cf, c in zip(confs, is_c)]
+    return {
+        'key_conf_chorale': float(np.mean(signed)),
+        'key_c_ratio': float(np.mean([float(c) for c in is_c])),
+        'key_conf_abs_mean': float(np.mean(confs)),
+        'key_dist': dict(Counter(keys).most_common()),
+    }
+
+
 def evaluate_generated(gen_list, ends_list, ref_metrics: dict) -> dict:
     """gen_list: [(pitch[4,T] 词表索引, rhythm[4,T])]；ends_list: 各曲的乐句末切片。"""
-    key_confs, chord_ok, chord_tot = [], 0, 0
+    pcs_per_piece, chord_ok, chord_tot = [], 0, 0
     vl_tot = Counter()
     cad_hit = cad_tot = 0
     sop_lines = []
@@ -130,12 +162,7 @@ def evaluate_generated(gen_list, ends_list, ref_metrics: dict) -> dict:
             pcs_all += pcs
             chord_tot += 1
             chord_ok += int(chord_explainable(pcs))
-        if pcs_all:
-            hist = np.zeros(12)
-            for pc in pcs_all:
-                hist[pc] += 1
-            k = key_confidence(hist)
-            key_confs.append(k['confidence'] if k['key'].startswith('C') else -k['confidence'])
+        pcs_per_piece.append(pcs_all)
         # 终止式落点: 乐句末切片的最低音是否在 主/属 音级上
         for e in ends:
             ps = [(int(pitch[v, e]), v) for v in range(V) if int(pitch[v, e]) < VOCAB.n_pitch]
@@ -153,7 +180,7 @@ def evaluate_generated(gen_list, ends_list, ref_metrics: dict) -> dict:
         sop_lines.append([(p + VOCAB.lo) % 12 if p < VOCAB.n_pitch else 12 for p in sop])
     pairs = max(vl_tot['pairs'], 1)
     return {
-        'key_conf_chorale': float(np.mean(key_confs)) if key_confs else 0.0,
+        **_key_stats(pcs_per_piece),
         'chord_explainable': chord_ok / max(chord_tot, 1),
         'cadence_bass_on_tonic_or_dom': cad_hit / max(cad_tot, 1),
         'parallel_5_per100': 100 * vl_tot['parallel_5'] / pairs,
@@ -167,7 +194,8 @@ def evaluate_generated(gen_list, ends_list, ref_metrics: dict) -> dict:
 def corpus_reference() -> dict:
     """真众赞歌的同一批指标（基线）。"""
     pieces = json.load(open(DATA / 'chorales_satb_v2.json', encoding='utf-8'))
-    key_confs, chord_ok, chord_tot = [], 0, 0
+    pcs_per_piece, chord_ok, chord_tot = [], 0, 0
+    cad_hit = cad_tot = 0
     vl_tot = Counter()
     sop_lines = []
     for p in pieces:
@@ -182,12 +210,17 @@ def corpus_reference() -> dict:
             pcs_all += pcs
             chord_tot += 1
             chord_ok += int(chord_explainable(pcs))
-        if pcs_all:
-            hist = np.zeros(12)
-            for pc in pcs_all:
-                hist[pc] += 1
-            k = key_confidence(hist)
-            key_confs.append(k['confidence'] if k['key'].startswith('C') else -k['confidence'])
+        pcs_per_piece.append(pcs_all)
+        # 终止式落点（与 evaluate_generated 同一条规则：乐句末最低音在主/属音级）
+        for ph in p['phrases']:
+            j = ph['end_slice']
+            if not (0 <= j < T):
+                continue
+            ps = [m for m in slices[j]['midi'].values() if m is not None]
+            if not ps:
+                continue
+            cad_tot += 1
+            cad_hit += int(min(ps) % 12 in (0, 7))
         midi = torch.full((1, N_VOICES, T), -1, dtype=torch.long)
         for t, s in enumerate(slices):
             for v, name in enumerate(VOICE_NAMES):
@@ -202,8 +235,9 @@ def corpus_reference() -> dict:
     flat = [pc for line in sop_lines for pc in line]
     sim = simaa(flat, sop_lines)
     return {
-        'key_conf_chorale': float(np.mean(key_confs)),
+        **_key_stats(pcs_per_piece),
         'chord_explainable': chord_ok / max(chord_tot, 1),
+        'cadence_bass_on_tonic_or_dom': cad_hit / max(cad_tot, 1),
         'parallel_5_per100': 100 * vl_tot['parallel_5'] / pairs,
         'parallel_8_per100': 100 * vl_tot['parallel_8'] / pairs,
         'crossing_per100': 100 * vl_tot['crossing'] / pairs,
@@ -219,6 +253,8 @@ def main():
     ap.add_argument('--bars', type=int, default=16, help='生成多少小节（1 小节 ≈ 4 切片）')
     ap.add_argument('--d', type=int, default=480)
     ap.add_argument('--layers', type=int, default=8)
+    ap.add_argument('--heads', type=int, default=8, help='注意力头数（须与训练时一致）')
+    ap.add_argument('--out', type=str, default='data/processed/v11_scratch_eval.json')
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--bpm', type=int, default=76)
     ap.add_argument('--planner', type=str, default=None,
@@ -229,7 +265,7 @@ def main():
     args = ap.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = SATBDiffusion(d=args.d, h=args.layers, layers=args.layers, vocab=VOCAB).to(device)
+    model = SATBDiffusion(d=args.d, h=args.heads, layers=args.layers, vocab=VOCAB).to(device)
     model.load_state_dict(torch.load(ROOT / args.ckpt, map_location=device, weights_only=True))
     model.eval()
     out_dir = ROOT / args.out_dir
@@ -265,7 +301,9 @@ def main():
     res = evaluate_generated(gens, ends_all, ref)
     print('\n=== 音乐性评估（自由生成 vs 真众赞歌）===')
     print(f'{"指标":32s} {"生成":>10s} {"真巴赫":>10s}')
-    for k, label in (('key_conf_chorale', '调性置信(C大调)'),
+    for k, label in (('key_c_ratio', '落在 C 调(含 c 小调)比例'),
+                     ('key_conf_abs_mean', '调性明确程度(平均置信)'),
+                     ('key_conf_chorale', 'C 度(有符号, 旧口径)'),
                      ('chord_explainable', '纵向音响可解释为和弦'),
                      ('cadence_bass_on_tonic_or_dom', '乐句末低音在主/属音'),
                      ('parallel_5_per100', '平行五度/100 对'),
@@ -275,10 +313,11 @@ def main():
         g = res.get(k, float('nan'))
         r = ref.get(k, float('nan'))
         print(f'{label:32s} {g:10.3f} {r:10.3f}')
-    json.dump({'generated': res, 'reference': ref, 'files': made},
-              open(ROOT / 'data/processed/v11_scratch_eval.json', 'w', encoding='utf-8'),
+    json.dump({'config': {**vars(args), 'n_generated': len(gens)},
+               'generated': res, 'reference': ref, 'files': made},
+              open(ROOT / args.out, 'w', encoding='utf-8'),
               ensure_ascii=False, indent=2)
-    print('→ data/processed/v11_scratch_eval.json')
+    print(f'→ {args.out}')
 
 
 if __name__ == '__main__':

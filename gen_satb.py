@@ -32,7 +32,8 @@ import mido
 
 from model.satb_diffusion import SATBDiffusion, SatbVocab
 from train_v10_satb import (COND_KEYS, DATA, HOLD, N_VOICES, RHYTHM_VALUES, TPB,
-                            VOICE_NAMES, group_split, load_corpus, piece_to_window)
+                            VOICE_NAMES, dur_to_bin, group_split, load_corpus,
+                            piece_to_window)
 
 # 合唱音色（General MIDI：52 = Choir Aahs）；也可用 19(教堂管风琴)
 PROGRAMS = (52, 52, 52, 52)
@@ -91,7 +92,10 @@ def harmonize_piece(model, piece, vocab, device, win=64, stride=24, keep_soprano
             m = s['midi'].get(name)
             if m is not None:
                 pitch[v, t] = m - vocab.lo
-                rhythm[v, t] = 4 if s['attack'].get(name) else HOLD
+                # 时值必须是真实 bin（与训练口径 piece_to_window 一致）：
+                # 写死成某一档会让"已知声部"的节奏与训练不符，真值 MIDI 的长音
+                # 也会被截断。
+                rhythm[v, t] = dur_to_bin(s['dur']) if s['attack'].get(name) else HOLD
     starts = list(range(0, max(1, T - win + 1), stride))
     if not starts or starts[-1] + win < T:
         starts.append(max(0, T - win))
@@ -132,7 +136,10 @@ def piece_truth(piece, vocab):
             m = s['midi'].get(name)
             if m is not None:
                 pitch[v, t] = m - vocab.lo
-                rhythm[v, t] = 4 if s['attack'].get(name) else HOLD
+                # 时值必须是真实 bin（与训练口径 piece_to_window 一致）：
+                # 写死成某一档会让"已知声部"的节奏与训练不符，真值 MIDI 的长音
+                # 也会被截断。
+                rhythm[v, t] = dur_to_bin(s['dur']) if s['attack'].get(name) else HOLD
     return pitch, rhythm
 
 

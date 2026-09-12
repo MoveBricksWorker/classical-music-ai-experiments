@@ -76,7 +76,7 @@ def corpus_baseline() -> dict:
         'range_span': statistics.mean(ranges) if ranges else 0,
         'onset_density': statistics.mean(dens) if dens else 0,
         'last_note_tonic': last_tonic / max(len(pieces), 1),
-        'phrase_end_stable': sum(phr_end_end for phr_end_end in phr_end_stable) / max(len(phr_end_stable), 1),
+        'phrase_end_stable': sum(phr_end_stable) / max(len(phr_end_stable), 1),
         'n_pieces': len(pieces),
     }
 
@@ -116,11 +116,15 @@ def gen_melody_scored(model, cond, T, device, seed=0, temp=0.8, scorer_weight=1.
     评分（与 v9 的 scorer 同思路）：
       +0.40 级进(1-2 半音) / -0.40 大跳(>=6) / -0.30 同音重复（防振荡）
       +0.20 和弦音(C-E-G)；乐句末 +0.60 落稳定音级(1/3/5)；末音 +1.20 落主音
+
+    ⚠️ 待生成位置喂 **[MASK]/num_rhythm**（与训练、`generate()` 一致）。
+    2026-09-12 修正：此前这里填的是 REST/HOLD，与训练约定不符
+    （实测两条输入路径的 argmax 仅 28% 一致），当时的评分引导数字是分布外算的。
     """
     import torch.nn.functional as F
     torch.manual_seed(seed)
-    pitch = torch.full((1, 1, T), VOCAB.rest, dtype=torch.long, device=device)
-    rhythm = torch.full((1, 1, T), HOLD, dtype=torch.long, device=device)
+    pitch = torch.full((1, 1, T), VOCAB.mask, dtype=torch.long, device=device)
+    rhythm = torch.full((1, 1, T), model.num_rhythm, dtype=torch.long, device=device)
     known = torch.zeros((1, 1, T), dtype=torch.bool, device=device)
     pl, rl = model.forward(pitch, rhythm, known, {k: cond[k] for k in COND_KEYS})
     probs = F.softmax(pl[0, 0] / temp, dim=-1).cpu().numpy()          # [T, 55]
@@ -195,6 +199,26 @@ def gen_melodies(ckpt, d, layers, n, bars, seed, device, temp=0.9):
     return out
 
 
+@torch.no_grad()
+def recovery_metrics(model, harmony_unknown: bool, device, win=64, stride=8) -> dict:
+    """掩码恢复准确率（有真值、可复现），与音乐性指标一起落盘。
+
+    口径必须写清：**和声条件是否喂真值**由 `harmony_unknown` 决定 ——
+    训练时没有和声条件的模型（v13）必须置"未知"，否则喂的是它没见过的条件，
+    数字不可比（实测同一检查点在两种条件下差 0.2–0.6）。
+    """
+    from torch.utils.data import DataLoader
+
+    from train_v10_satb import WindowDataset, eval_recovery
+    w = load_corpus('chorales', VOCAB, win, stride)
+    _, vl, _ = group_split(w, 0.08, 42)
+    rec = eval_recovery(model, DataLoader(WindowDataset(vl), batch_size=16), device,
+                        harmony_unknown=harmony_unknown)
+    return {'mask_recovery': rec,
+            'mask_recovery_cond': '和声条件=未知' if harmony_unknown else '和声条件=真值',
+            'mask_recovery_win': win}
+
+
 def describe(gens) -> dict:
     """生成旋律的同一批音乐性指标（口径与 corpus_baseline 一致）。"""
     all_iv = []          # 全部相邻音程
@@ -253,6 +277,10 @@ def main():
     ap.add_argument('--scored', action='store_true', help='用乐理评分引导旋律解码')
     ap.add_argument('--with-harmony', action='store_true',
                     help='诊断: 用真值曲子的和声条件生成旋律（检验"和声锚定"假设）')
+    ap.add_argument('--out', type=str, default='data/processed/melody_eval.json')
+    ap.add_argument('--recovery-harmony', choices=['auto', 'unknown', 'true'], default='auto',
+                    help='掩码恢复评估时的和声条件；auto = 有 --with-harmony 则真值, 否则未知')
+    ap.add_argument('--no-recovery', action='store_true', help='跳过掩码恢复评估')
     args = ap.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -262,7 +290,8 @@ def main():
           f'音域跨度 {ref["range_span"]:.1f} | 乐句末稳定音 {ref["phrase_end_stable"]:.2f} | '
           f'末音主音 {ref["last_note_tonic"]:.2f}')
     out = {'corpus': ref}
-    for tag, ck in (('v14(新)', args.ckpt),) + ((('v13(旧)', args.ref),) if args.ref else ()):
+    for tag, ck in ((Path(args.ckpt).stem, args.ckpt),) + (
+            ((Path(args.ref).stem, args.ref),) if args.ref else ()):
         if args.with_harmony:
             model = SATBDiffusion(d=args.melody_d, h=8, layers=args.melody_layers,
                                   vocab=VOCAB, n_voices=1).to(device)
@@ -285,19 +314,33 @@ def main():
             gens = gen_melodies(ck, args.melody_d, args.melody_layers, args.n, args.bars,
                                 args.seed, device, args.temp)
         r = describe(gens)
+        if not args.no_recovery:
+            m2 = SATBDiffusion(d=args.melody_d, h=8, layers=args.melody_layers,
+                               vocab=VOCAB, n_voices=1).to(device)
+            m2.load_state_dict(torch.load(MD / ck, map_location=device, weights_only=True))
+            m2.eval()
+            hu = (args.recovery_harmony == 'unknown' or
+                  (args.recovery_harmony == 'auto' and not args.with_harmony))
+            r.update(recovery_metrics(m2, hu, device))
         out[tag] = r
         print(f'\n{tag} ({ck}, {r["n_generated"]} 首): 级进率 {r["step_ratio"]:.3f} | '
               f'平均音程 {r["avg_interval"]:.2f} | 方向变化 {r["direction_change"]:.2f} | '
               f'音域跨度 {r["range_span"]:.1f} | 乐句末稳定音 {r["phrase_end_stable"]:.2f} | '
               f'末音主音 {r["last_note_tonic"]:.2f}')
+        if 'mask_recovery' in r:
+            print(f'  掩码恢复（{r["mask_recovery_cond"]}, win{r["mask_recovery_win"]}）: '
+                  + ' '.join(f'{k.replace("rec_pitch_", "")}={v:.3f}'
+                             for k, v in r['mask_recovery'].items()
+                             if k.startswith('rec_pitch')))
         od = MD / args.out_dir / tag.split('(')[0]
         od.mkdir(parents=True, exist_ok=True)
         for i, (p, rh, _) in enumerate(gens[:3]):
             write_midi(od / f'mel_{i + 1}.mid', torch.stack([p]), torch.stack([rh]),
                        [float(t) for t in range(len(p))], VOCAB, 76)
-    json.dump(out, open(MD / 'data/processed/melody_eval.json', 'w', encoding='utf-8'),
+    out['_config'] = {**vars(args), 'device': device}
+    json.dump(out, open(MD / args.out, 'w', encoding='utf-8'),
               ensure_ascii=False, indent=2)
-    print('\n→ data/processed/melody_eval.json 与 data/generated/melody/')
+    print(f'\n→ {args.out} 与 data/generated/melody/')
 
 
 if __name__ == '__main__':

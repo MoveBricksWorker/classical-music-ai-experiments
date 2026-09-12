@@ -1,6 +1,6 @@
 {
   "config": {
-    "realizer": "v11_scratch.pt",
+    "realizer": "v10_aug_vl20.pt",
     "realizer_d": 480,
     "realizer_layers": 8,
     "planner": "harmony_planner_mel.pt",
@@ -10,24 +10,24 @@
     "win": 64,
     "stride": 8,
     "seed": 0,
-    "out": "data/processed/v13_planned.json"
+    "out": "data/processed/v13_planned_v10aug.json"
   },
   "n_val_pieces": 22,
   "true": {
-    "acc": 0.8133680555555556,
-    "chord_explainable": 0.9000651041666666,
+    "acc": 0.8761935763888888,
+    "chord_explainable": 0.8723958333333334,
     "n_windows": 48,
     "n_notes_scored": 9216
   },
   "planned": {
-    "acc": 0.2573784722222222,
-    "chord_explainable": 0.8606770833333334,
+    "acc": 0.2095269097222222,
+    "chord_explainable": 0.822265625,
     "n_windows": 48,
     "n_notes_scored": 9216
   },
   "none": {
-    "acc": 0.4736328125,
-    "chord_explainable": 0.8570963541666666,
+    "acc": 0.119140625,
+    "chord_explainable": 0.5989583333333334,
     "n_windows": 48,
     "n_notes_scored": 9216
   },

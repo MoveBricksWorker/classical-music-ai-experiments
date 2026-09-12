@@ -1,0 +1,287 @@
+{
+  "config": {
+    "pattern": "v10_cv_fold{}.pt",
+    "folds": 3,
+    "eval_n": 400,
+    "d": 480,
+    "layers": 8,
+    "heads": 8,
+    "win": 64,
+    "stride": 8,
+    "seed": 42,
+    "aug_transpose": 2,
+    "no_aug_eval": false,
+    "out": "data/processed/v10_cv_summary.json"
+  },
+  "n_folds": 3,
+  "main": {
+    "transpose_aug": 0,
+    "folds": [
+      {
+        "fold": 0,
+        "ckpt": "v10_cv_fold0.pt",
+        "n_val_pieces": 92,
+        "n_val_windows": 406,
+        "harm_pitch_acc_masked": 0.8490686549265483,
+        "harm_pitch_acc_chorale": 0.8490686549265483,
+        "harm_rhythm_acc": 0.9019140625,
+        "parallel_5_per100": 0.1852047835749815,
+        "ref_parallel_5_per100": 0.031809566727193206,
+        "parallel_8_per100": 0.5225420679436977,
+        "ref_parallel_8_per100": 0.0013253986136330502,
+        "crossing_per100": 1.1879563975023812,
+        "ref_crossing_per100": 0.8283741335206564,
+        "spacing_per100": 0.6416022859561858,
+        "ref_spacing_per100": 0.4148497660671447,
+        "rec_rec_pitch_harmonize": 0.7086397058823529,
+        "rec_rec_rhythm_harmonize": 0.9079159007352942,
+        "rec_rec_pitch_infill": 0.8547443674176777,
+        "rec_rec_rhythm_infill": 0.8598353552859619,
+        "rec_rec_pitch_random": 0.8776830808080808,
+        "rec_rec_rhythm_random": 0.9005681818181818,
+        "per_voice_pitch_acc": {
+          "A": 0.8553104958548412,
+          "T": 0.8425150637765083,
+          "B": 0.8493766365732599
+        }
+      },
+      {
+        "fold": 1,
+        "ckpt": "v10_cv_fold1.pt",
+        "n_val_pieces": 92,
+        "n_val_windows": 336,
+        "harm_pitch_acc_masked": 0.5711560532274574,
+        "harm_pitch_acc_chorale": 0.5711560532274574,
+        "harm_rhythm_acc": 0.7681051587301587,
+        "parallel_5_per100": 0.8144425715590983,
+        "ref_parallel_5_per100": 0.029958531085917915,
+        "parallel_8_per100": 1.6714188944375306,
+        "ref_parallel_8_per100": 0.0,
+        "crossing_per100": 0.6317049732982561,
+        "ref_crossing_per100": 0.7158512164740386,
+        "spacing_per100": 0.16540903290852094,
+        "ref_spacing_per100": 0.7363491587959824,
+        "rec_rec_pitch_harmonize": 0.4694393382352941,
+        "rec_rec_rhythm_harmonize": 0.7236902573529411,
+        "rec_rec_pitch_infill": 0.4826689774696707,
+        "rec_rec_rhythm_infill": 0.5688908145580589,
+        "rec_rec_pitch_random": 0.54916351010101,
+        "rec_rec_rhythm_random": 0.7300347222222222,
+        "per_voice_pitch_acc": {
+          "A": 0.6167906976744186,
+          "T": 0.5489365662958998,
+          "B": 0.5477176492485226
+        }
+      },
+      {
+        "fold": 2,
+        "ckpt": "v10_cv_fold2.pt",
+        "n_val_pieces": 91,
+        "n_val_windows": 325,
+        "harm_pitch_acc_masked": 0.6990800102577254,
+        "harm_pitch_acc_chorale": 0.6990800102577254,
+        "harm_rhythm_acc": 0.8262660256410257,
+        "parallel_5_per100": 0.514783741956504,
+        "ref_parallel_5_per100": 0.03582653443418503,
+        "parallel_8_per100": 1.0979881078439357,
+        "ref_parallel_8_per100": 0.008142394189587506,
+        "crossing_per100": 1.06051967092938,
+        "ref_crossing_per100": 0.7637565749833081,
+        "spacing_per100": 0.5489940539219679,
+        "ref_spacing_per100": 0.5699675932711255,
+        "rec_rec_pitch_harmonize": 0.5953584558823529,
+        "rec_rec_rhythm_harmonize": 0.8018727022058824,
+        "rec_rec_pitch_infill": 0.6551126516464472,
+        "rec_rec_rhythm_infill": 0.69486568457539,
+        "rec_rec_pitch_random": 0.6870265151515151,
+        "rec_rec_rhythm_random": 0.788510101010101,
+        "per_voice_pitch_acc": {
+          "A": 0.7249603308169448,
+          "T": 0.6816673878551853,
+          "B": 0.6906135795345258
+        }
+      }
+    ],
+    "mean_std": {
+      "harm_pitch_acc_masked": {
+        "mean": 0.7064349061372437,
+        "std": 0.11357647765812043
+      },
+      "harm_pitch_acc_chorale": {
+        "mean": 0.7064349061372437,
+        "std": 0.11357647765812043
+      },
+      "harm_rhythm_acc": {
+        "mean": 0.8320950822903947,
+        "std": 0.05478253437053226
+      },
+      "parallel_5_per100": {
+        "mean": 0.5048103656968612,
+        "std": 0.2569820352116705
+      },
+      "ref_parallel_5_per100": {
+        "mean": 0.03253154408243205,
+        "std": 0.0024493950681650314
+      },
+      "parallel_8_per100": {
+        "mean": 1.0973163567417212,
+        "std": 0.46902724089388287
+      },
+      "ref_parallel_8_per100": {
+        "mean": 0.003155930934406852,
+        "std": 0.0035672381677057706
+      },
+      "crossing_per100": {
+        "mean": 0.9600603472433391,
+        "std": 0.2379397241864305
+      },
+      "ref_crossing_per100": {
+        "mean": 0.769327308326001,
+        "std": 0.04610586743319877
+      },
+      "spacing_per100": {
+        "mean": 0.45200179092889153,
+        "std": 0.20614821184836557
+      },
+      "ref_spacing_per100": {
+        "mean": 0.5737221727114175,
+        "std": 0.13127842557285882
+      }
+    }
+  },
+  "aug": {
+    "transpose_aug": 2,
+    "folds": [
+      {
+        "fold": 0,
+        "ckpt": "v10_cv_fold0.pt",
+        "n_val_pieces": 93,
+        "n_val_windows": 1797,
+        "harm_pitch_acc_masked": 0.4539830692424571,
+        "harm_pitch_acc_chorale": 0.4539830692424571,
+        "harm_rhythm_acc": 0.7420789930555556,
+        "parallel_5_per100": 0.7164902998236331,
+        "ref_parallel_5_per100": 0.03309066843150232,
+        "parallel_8_per100": 1.8628747795414462,
+        "ref_parallel_8_per100": 0.011030222810500772,
+        "crossing_per100": 2.6565255731922397,
+        "ref_crossing_per100": 0.6397529230090447,
+        "spacing_per100": 1.7857142857142858,
+        "ref_spacing_per100": 0.5515111405250386,
+        "rec_rec_pitch_harmonize": 0.3710363051470588,
+        "rec_rec_rhythm_harmonize": 0.7010569852941176,
+        "rec_rec_pitch_infill": 0.40847053726169846,
+        "rec_rec_rhythm_infill": 0.5732235701906413,
+        "rec_rec_pitch_random": 0.43773674242424243,
+        "rec_rec_rhythm_random": 0.7102272727272727,
+        "per_voice_pitch_acc": {
+          "A": 0.4554036458333333,
+          "T": 0.41270358306188926,
+          "B": 0.4938151041666667
+        }
+      },
+      {
+        "fold": 1,
+        "ckpt": "v10_cv_fold1.pt",
+        "n_val_pieces": 92,
+        "n_val_windows": 1553,
+        "harm_pitch_acc_masked": 0.4395616319444444,
+        "harm_pitch_acc_chorale": 0.4395616319444444,
+        "harm_rhythm_acc": 0.7732204861111112,
+        "parallel_5_per100": 0.9369488536155203,
+        "ref_parallel_5_per100": 0.02204585537918871,
+        "parallel_8_per100": 1.917989417989418,
+        "ref_parallel_8_per100": 0.0,
+        "crossing_per100": 1.9841269841269842,
+        "ref_crossing_per100": 0.7385361552028219,
+        "spacing_per100": 0.6283068783068783,
+        "ref_spacing_per100": 0.5511463844797179,
+        "rec_rec_pitch_harmonize": 0.3635684742647059,
+        "rec_rec_rhythm_harmonize": 0.7109949448529411,
+        "rec_rec_pitch_infill": 0.3409878682842288,
+        "rec_rec_rhythm_infill": 0.5285961871750433,
+        "rec_rec_pitch_random": 0.44065656565656564,
+        "rec_rec_rhythm_random": 0.712042297979798,
+        "per_voice_pitch_acc": {
+          "A": 0.4817708333333333,
+          "T": 0.4000651041666667,
+          "B": 0.4368489583333333
+        }
+      },
+      {
+        "fold": 2,
+        "ckpt": "v10_cv_fold2.pt",
+        "n_val_pieces": 92,
+        "n_val_windows": 1924,
+        "harm_pitch_acc_masked": 0.3806423611111111,
+        "harm_pitch_acc_chorale": 0.3806423611111111,
+        "harm_rhythm_acc": 0.7074652777777778,
+        "parallel_5_per100": 0.7716049382716049,
+        "ref_parallel_5_per100": 0.0,
+        "parallel_8_per100": 1.6424162257495591,
+        "ref_parallel_8_per100": 0.0,
+        "crossing_per100": 5.015432098765432,
+        "ref_crossing_per100": 0.7495590828924162,
+        "spacing_per100": 1.1353615520282188,
+        "ref_spacing_per100": 0.4519400352733686,
+        "rec_rec_pitch_harmonize": 0.3323184742647059,
+        "rec_rec_rhythm_harmonize": 0.6910615808823529,
+        "rec_rec_pitch_infill": 0.3231152512998267,
+        "rec_rec_rhythm_infill": 0.5399696707105719,
+        "rec_rec_pitch_random": 0.3836805555555556,
+        "rec_rec_rhythm_random": 0.6842645202020202,
+        "per_voice_pitch_acc": {
+          "A": 0.4000651041666667,
+          "T": 0.3505859375,
+          "B": 0.3912760416666667
+        }
+      }
+    ],
+    "mean_std": {
+      "harm_pitch_acc_masked": {
+        "mean": 0.4247290207660042,
+        "std": 0.03172506509664887
+      },
+      "harm_pitch_acc_chorale": {
+        "mean": 0.4247290207660042,
+        "std": 0.03172506509664887
+      },
+      "harm_rhythm_acc": {
+        "mean": 0.7409215856481481,
+        "std": 0.026856923994506638
+      },
+      "parallel_5_per100": {
+        "mean": 0.8083480305702527,
+        "std": 0.09367687231027311
+      },
+      "ref_parallel_5_per100": {
+        "mean": 0.01837884127023034,
+        "std": 0.01375580674157598
+      },
+      "parallel_8_per100": {
+        "mean": 1.8077601410934745,
+        "std": 0.11906122682260173
+      },
+      "ref_parallel_8_per100": {
+        "mean": 0.0036767409368335907,
+        "std": 0.005199696898202423
+      },
+      "crossing_per100": {
+        "mean": 3.218694885361552,
+        "std": 1.2998021454993298
+      },
+      "ref_crossing_per100": {
+        "mean": 0.7092827203680943,
+        "std": 0.049370509242565565
+      },
+      "spacing_per100": {
+        "mean": 1.183127572016461,
+        "std": 0.4737152247075044
+      },
+      "ref_spacing_per100": {
+        "mean": 0.518199186759375,
+        "std": 0.04685253197339718
+      }
+    }
+  }
+}

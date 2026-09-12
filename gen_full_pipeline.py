@@ -35,7 +35,8 @@ from gen_satb import write_midi
 from gen_from_scratch import (build_plan, chord_explainable, corpus_reference,
                               evaluate_generated, VOCAB)
 from model.satb_diffusion import N_VOICES, SATBDiffusion, SatbVocab, voiceleading_metrics
-from train_harmony_planner import HarmonyPlanner, N_FUNC, N_ROOT, N_TYPE
+from train_harmony_planner import (N_FUNC_LABEL, N_TYPE_LABEL, HarmonyPlanner,
+                                   sample_plan_token)
 from train_v10_satb import COND_KEYS, HOLD
 
 
@@ -63,9 +64,9 @@ def plan_harmony(planner, cond, sop, T, device, seed=0, temp=0.9):
         c = {k: cond[k][:, i:i + 1] for k in
              ('pos_bin', 'toend_bin', 'phrase_bin', 'cadence', 'style')}
         lf, lt, lr = planner(c, pf, pt, pr, sop=sop[:, i:i + 1])
-        fs.append(min(int(torch.multinomial(F.softmax(lf[0, -1] / temp, -1), 1)), N_FUNC - 2))
-        ts.append(min(int(torch.multinomial(F.softmax(lt[0, -1] / temp, -1), 1)), N_TYPE - 2))
-        rs.append(min(int(torch.multinomial(F.softmax(lr[0, -1] / temp, -1), 1)), 11))
+        fs.append(sample_plan_token(lf[0, -1], N_FUNC_LABEL, temp))
+        ts.append(sample_plan_token(lt[0, -1], N_TYPE_LABEL, temp))
+        rs.append(sample_plan_token(lr[0, -1], 12, temp))          # root 0-11
         pf = torch.cat([pf, torch.tensor([[fs[-1]]], device=device)], 1)
         pt = torch.cat([pt, torch.tensor([[ts[-1]]], device=device)], 1)
         pr = torch.cat([pr, torch.tensor([[rs[-1]]], device=device)], 1)
@@ -140,7 +141,9 @@ def main():
     res = evaluate_generated(gens, ends_all, ref)
     print('\n=== 端到端生成（模板→旋律→和声→四声部） vs 真众赞歌 ===')
     print(f'{"指标":32s} {"生成":>10s} {"真巴赫":>10s}')
-    for k, label in (('key_conf_chorale', '调性置信(C大调)'),
+    for k, label in (('key_c_ratio', '落在 C 调(含 c 小调)比例'),
+                     ('key_conf_abs_mean', '调性明确程度(平均置信)'),
+                     ('key_conf_chorale', 'C 度(有符号, 旧口径)'),
                      ('chord_explainable', '纵向音响可解释为和弦'),
                      ('cadence_bass_on_tonic_or_dom', '乐句末低音在主/属音'),
                      ('parallel_5_per100', '平行五度/100 对'),
@@ -148,7 +151,8 @@ def main():
                      ('crossing_per100', '声部交越/100 对'),
                      ('spacing_per100', '间距>八度/100 对')):
         print(f'{label:32s} {res.get(k, float("nan")):10.3f} {ref.get(k, float("nan")):10.3f}')
-    json.dump({'generated': res, 'reference': ref},
+    json.dump({'config': {**vars(args), 'n_generated': len(gens)},
+               'generated': res, 'reference': ref},
               open(ROOT / 'data/processed/v13_full_eval.json', 'w', encoding='utf-8'),
               ensure_ascii=False, indent=2)
     print(f'→ {out_dir} 与 data/processed/v13_full_eval.json')

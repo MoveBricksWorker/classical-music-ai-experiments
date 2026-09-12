@@ -1,0 +1,46 @@
+{
+  "config": {
+    "ckpt": "v10_aug_vl20.pt",
+    "corpus": "chorales",
+    "d": 480,
+    "layers": 8,
+    "heads": 8,
+    "win": 64,
+    "stride": 8,
+    "n": 48,
+    "candidates": 8,
+    "temp": 1.0,
+    "seed": 0,
+    "out": "data/processed/v10_decode_experiment_v10aug.json"
+  },
+  "argmax": {
+    "pitch_acc": 0.8761935763888888,
+    "parallel_5": 13,
+    "parallel_8": 55,
+    "crossing": 95,
+    "spacing": 143,
+    "overlap": 292,
+    "range_violation": 70,
+    "pairs": 9072
+  },
+  "best_of_k": {
+    "pitch_acc": 0.8693576388888888,
+    "parallel_5": 10,
+    "parallel_8": 38,
+    "crossing": 89,
+    "spacing": 145,
+    "overlap": 285,
+    "range_violation": 73,
+    "pairs": 9072
+  },
+  "random_cand": {
+    "pitch_acc": 0.8695746527777778,
+    "parallel_5": 15,
+    "parallel_8": 49,
+    "crossing": 97,
+    "spacing": 144,
+    "overlap": 300,
+    "range_violation": 75,
+    "pairs": 9068
+  }
+}

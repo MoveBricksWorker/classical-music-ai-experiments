@@ -55,6 +55,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 
+from chorale_conditions import kfold_by_piece
 from model.satb_diffusion import (N_VOICES, VOICE_NAMES, SATBDiffusion, SatbVocab,
                                   voiceleading_metrics)
 
@@ -146,7 +147,8 @@ def piece_to_window(piece: dict, vocab: SatbVocab, ws: int, we: int, trans: int 
     }
 
 
-def build_windows(pieces, vocab, win: int, stride: int, limit: int = 0, transpose_aug: int = 0):
+def build_windows(pieces, vocab, win: int, stride: int, limit: int = 0, transpose_aug: int = 0,
+                  seed: int = 0):
     out = []
     for p in pieces:
         T = len(p['slices'])
@@ -159,7 +161,11 @@ def build_windows(pieces, vocab, win: int, stride: int, limit: int = 0, transpos
                 w = piece_to_window(p, vocab, ws, we, tr)
                 if w:
                     out.append(w)
-    random.shuffle(out)
+    # ⚠️ 必须用**局部** Random：此前用全局 random.shuffle，窗口顺序取决于
+    # 调用前进程的全局随机状态 —— 于是 gen_satb/analyze_* 里"抽 n 个窗口"
+    # 每次运行抽到的都不一样（同一命令两跑结果不同）。用固定种子后，
+    # 凡是"从窗口列表里采样"的脚本才可复现。
+    random.Random(seed).shuffle(out)
     return out[:limit] if limit else out
 
 
@@ -192,8 +198,8 @@ def load_corpus(kind: str, vocab: SatbVocab, win: int, stride: int,
             pal = json.load(fh)
     n_slices = sum(len(p['slices']) for p in cho) + sum(len(p['slices']) for p in pal)
     print(f'语料 {kind}: 众赞歌 {len(cho)} 首 / Palestrina {len(pal)} 首, 切片 {n_slices:,}')
-    w_cho = build_windows(cho, vocab, win, stride, transpose_aug=transpose_aug)
-    w_pal = build_windows(pal, vocab, win, stride, transpose_aug=transpose_aug)
+    w_cho = build_windows(cho, vocab, win, stride, transpose_aug=transpose_aug, seed=seed)
+    w_pal = build_windows(pal, vocab, win, stride, transpose_aug=transpose_aug, seed=seed)
     if palestrina_max and len(w_pal) > palestrina_max:
         random.Random(seed).shuffle(w_pal)
         w_pal = w_pal[:palestrina_max]
@@ -224,7 +230,7 @@ def cond_of(batch, device, keys):
 
 @torch.no_grad()
 def eval_harmonize(model, windows, device, n=48, seed=0,
-                   keep_voices=(0,)):
+                   keep_voices=(0,), harmony_unknown=False):
     """只给 keep_voices（默认 Soprano），生成其余声部 → 准确率 + 声部进行指标。
 
     分 **chorale（有功能和声条件）** 与 **palestrina（自由对位）** 两个口径报告：
@@ -246,6 +252,9 @@ def eval_harmonize(model, windows, device, n=48, seed=0,
             known[:, v] = True
         cond = {k: w[k][None].to(device) for k in
                 ('func', 'type', 'root', 'pos_bin', 'toend_bin', 'phrase_bin', 'cadence', 'style')}
+        if harmony_unknown:
+            for k, unk in (('func', 7), ('type', 9), ('root', 12)):
+                cond[k] = torch.full_like(cond[k], unk)
         # 单步 argmax = 与训练一致的用法 (实测 0.62 vs 迭代 16 步 0.14)
         gp, gr = model.generate(pitch, rhythm, known, cond, steps=1, argmax=True)
         tgt_p, tgt_r = pitch[0], rhythm[0]
@@ -294,9 +303,20 @@ def eval_harmonize(model, windows, device, n=48, seed=0,
 
 
 @torch.no_grad()
-def eval_recovery(model, loader, device, mode='random'):
-    """掩码恢复准确率（三种模式各测一次，衡量通用能力）。"""
+def eval_recovery(model, loader, device, mode='random', harmony_unknown=False, seed=0):
+    """掩码恢复准确率（三种模式各测一次，衡量通用能力）。
+
+    ⚠️ 两处读法上的坑：
+    1. 单声部模型（V=1）没有"配和声"任务，`sample_mask` 会把 harmonize 退化成
+       随机掩码 —— 所以 `rec_pitch_harmonize` 对单声部模型**不是**配和声准确率；
+    2. `harmony_unknown=True` 把和声条件置为"未知"，训练时没用和声条件的模型
+       （如 v13 旋律）必须开，否则等于喂了一个它从未见过的条件（实测虚高）。
+
+    掩码采样用 Python `random` + `torch.rand` 两个随机源，这里统一按 seed 固定，
+    否则同一检查点两次运行数字不一致。
+    """
     model.eval()
+    torch.manual_seed(seed); random.seed(seed)
     out = {}
     n_voices = next(iter(loader))[0].shape[1]
     for m in (('harmonize', 'infill', 'random') if n_voices >= 2 else ('infill', 'random')):
@@ -309,7 +329,9 @@ def eval_recovery(model, loader, device, mode='random'):
             pitch = cond.pop('pitch'); rhythm = cond.pop('rhythm')
             if model.V < pitch.shape[1]:          # 单声部模型: 只取前 V 个声部
                 pitch = pitch[:, :model.V]; rhythm = rhythm[:, :model.V]
-            torch.manual_seed(0)
+            if harmony_unknown:
+                for k, unk in (('func', 7), ('type', 9), ('root', 12)):
+                    cond[k] = torch.full_like(cond[k], unk)
             known = model.sample_mask(pitch.shape[0], pitch.shape[1], pitch.shape[2],
                                       m, pitch.device)
             pl, rl = model.forward(*[torch.where(
@@ -420,6 +442,12 @@ def main():
     ap.add_argument('--aug-transpose', type=int, default=0,
                     help='随机移调半音数上限 (0=关闭; 2 表示 ±2)')
     ap.add_argument('--val-ratio', type=float, default=0.08)
+    ap.add_argument('--folds', type=int, default=1,
+                    help='>1 时按曲 k 折交叉验证（本折取 --fold）——"训练/评估严格分离"口径')
+    ap.add_argument('--fold', type=int, default=0, help='k 折中的第几折（0 起）')
+    ap.add_argument('--seed', type=int, default=42, help='划分/初始化的随机种子')
+    ap.add_argument('--eval-harmony-unknown', action='store_true',
+                    help='评估时把和声条件置为"未知"（无和声条件的旋律模型必须开）')
     ap.add_argument('--out', type=str, default='v10_satb.pt')
     ap.add_argument('--tag', type=str, default='v10')
     ap.add_argument('--palestrina-max', type=int, default=0,
@@ -439,47 +467,60 @@ def main():
     ap.add_argument('--export-only', action='store_true')
     ap.add_argument('--ckpt', type=str, default=None)
     ap.add_argument('--n-export', type=int, default=3)
+    ap.add_argument('--export-dir', type=str, default='data/generated',
+                    help='试听样例输出目录（同名文件会被覆盖，建议按实验分目录）')
     args = ap.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     vocab = SatbVocab()
-    torch.manual_seed(42); random.seed(42); np.random.seed(42)
+    torch.manual_seed(args.seed); random.seed(args.seed); np.random.seed(args.seed)
+    n_voices = 1 if args.solo_voice >= 0 else 4
+
+    def build_split(transpose_aug: int):
+        """返回 (训练窗, 验证窗, 验证曲 id)；--folds>1 时取该折，否则单次按曲留出。"""
+        ws = load_corpus(args.corpus, vocab, args.win, args.stride,
+                         transpose_aug=transpose_aug, palestrina_max=args.palestrina_max)
+        if args.folds > 1:
+            folds = kfold_by_piece(ws, k=args.folds, seed=args.seed)
+            tr, vl, ids = folds[args.fold % args.folds]
+            print(f'按曲 {args.folds} 折交叉验证: 第 {args.fold} 折')
+            return tr, vl, ids
+        return group_split(ws, args.val_ratio, args.seed)
 
     if args.eval_only:
-        windows = load_corpus(args.corpus, vocab, args.win, args.stride)
-        _, vl, _ = group_split(windows, args.val_ratio)
-        model = SATBDiffusion(d=args.d, h=args.heads, layers=args.layers, vocab=vocab).to(device)
+        _, vl, _ = build_split(0)
+        model = SATBDiffusion(d=args.d, h=args.heads, layers=args.layers, vocab=vocab,
+                              n_voices=n_voices).to(device)
         model.load_state_dict(torch.load(ROOT / args.ckpt, map_location=device, weights_only=True))
         rec = eval_recovery(model, DataLoader(WindowDataset(vl), batch_size=args.batch),
-                            device)
-        harm = eval_harmonize(model, vl, device, n=args.eval_n)
-        print(f'检查点 {args.ckpt} | 验证窗口 {len(vl)}')
+                            device, harmony_unknown=args.eval_harmony_unknown)
+        harm = (eval_harmonize(model, vl, device, n=args.eval_n,
+                               harmony_unknown=args.eval_harmony_unknown)
+                if model.V >= 2 else {})
+        print(f'检查点 {args.ckpt} | 验证窗口 {len(vl)} | 声部数 {model.V}')
         for k in ('harm_pitch_acc_masked', 'harm_pitch_acc_chorale', 'harm_rhythm_acc',
                   'parallel_5_per100', 'ref_parallel_5_per100', 'crossing_per100',
                   'ref_crossing_per100'):
             if k in harm:
                 print(f'  {k:26s} {harm[k]:.3f}')
-        print(f'  逐声部 {harm["per_voice_pitch_acc"]}')
+        if harm:
+            print(f'  逐声部 {harm["per_voice_pitch_acc"]}')
         print('  ' + ' '.join(f'{k}={v:.3f}' for k, v in rec.items()))
         return
 
     if args.export_only:
-        windows = load_corpus(args.corpus, vocab, args.win, args.stride)
-        _, vl, _ = group_split(windows, args.val_ratio)
-        model = SATBDiffusion(d=args.d, h=args.heads, layers=args.layers, vocab=vocab).to(device)
+        _, vl, _ = build_split(0)
+        model = SATBDiffusion(d=args.d, h=args.heads, layers=args.layers, vocab=vocab,
+                              n_voices=n_voices).to(device)
         model.load_state_dict(torch.load(ROOT / args.ckpt, map_location=device, weights_only=True))
-        made = export_samples(model, vl, device, ROOT / 'data/generated', n=args.n_export)
+        made = export_samples(model, vl, device, ROOT / args.export_dir, n=args.n_export)
         print('已导出:', made)
         return
 
-    windows = load_corpus(args.corpus, vocab, args.win, args.stride,
-                          transpose_aug=args.aug_transpose,
-                          palestrina_max=args.palestrina_max)
-    tr_w, vl_w, val_ids = group_split(windows, args.val_ratio)
+    tr_w, vl_w, val_ids = build_split(args.aug_transpose)
     print(f'窗口: 训练 {len(tr_w)} / 验证 {len(vl_w)} ({len(val_ids)} 首曲) | '
           f'序列长 {args.win} | 移调增广 ±{args.aug_transpose}')
 
-    n_voices = 1 if args.solo_voice >= 0 else 4
     model = SATBDiffusion(d=args.d, h=args.heads, layers=args.layers, vocab=vocab,
                           n_voices=n_voices).to(device)
     if args.solo_voice >= 0:
@@ -499,6 +540,7 @@ def main():
     best = -1.0
     no_gain = 0
     hist = []
+    best_epoch, best_metrics = None, None
     for ep in range(args.epochs):
         model.train()
         tot = nb = 0
@@ -522,9 +564,11 @@ def main():
             tot += loss.item(); nb += 1
         sched.step()
         if (ep + 1) % max(1, args.epochs // 10) == 0 or ep == args.epochs - 1:
-            rec = eval_recovery(model, vl, device)
+            rec = eval_recovery(model, vl, device,
+                                harmony_unknown=args.eval_harmony_unknown)
             if model.V >= 2:                       # 配和声评估需要 ≥2 个声部
-                harm = eval_harmonize(model, vl_w, device, n=args.eval_n)
+                harm = eval_harmonize(model, vl_w, device, n=args.eval_n,
+                                      harmony_unknown=args.eval_harmony_unknown)
             else:
                 harm = {'harm_pitch_acc_chorale': 0.0, 'harm_rhythm_acc_chorale': 0.0,
                         'parallel_5_per100': 0.0, 'ref_parallel_5_per100': 0.0,
@@ -547,6 +591,8 @@ def main():
             if score > best + 1e-4:
                 best = score
                 no_gain = 0
+                best_epoch = ep + 1
+                best_metrics = {'score': score, **rec, **harm}
                 torch.save(model.state_dict(), str(ROOT / args.out))
                 print(f'   ↳ 保存检查点 (score {score:.3f})', flush=True)
             else:
@@ -556,7 +602,9 @@ def main():
                     break
 
     report = {'config': vars(args), 'n_params': n_par, 'n_train': len(tr_w), 'n_val': len(vl_w),
-              'history': hist, 'best_score': best, 'seconds': round(time.time() - t0, 1)}
+              'n_val_pieces': len(val_ids), 'history': hist, 'best_score': best,
+              'best_epoch': best_epoch, 'best_metrics': best_metrics,
+              'seconds': round(time.time() - t0, 1)}
     json.dump(report, open(ROOT / f'data/processed/{args.tag}_report.json', 'w',
                            encoding='utf-8'), ensure_ascii=False, indent=2)
     print(f'→ data/processed/{args.tag}_report.json')
@@ -565,7 +613,7 @@ def main():
         print(f"最好成绩: 配和声音高 {h['harm_pitch_acc_masked']:.3f} | "
               f"逐声部 {h['per_voice_pitch_acc']}")
 
-    made = export_samples(model, vl_w, device, ROOT / 'data/generated', n=args.n_export)
+    made = export_samples(model, vl_w, device, ROOT / args.export_dir, n=args.n_export)
     print('试听样例:', made)
 
 

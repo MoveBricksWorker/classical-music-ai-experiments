@@ -1,0 +1,49 @@
+{
+  "corpus": {
+    "step_ratio": 0.9106752346667564,
+    "avg_interval": 1.1249200955489016,
+    "direction_change": 0.45097424972048217,
+    "range_span": 11.782608695652174,
+    "onset_density": 1.334431916464947,
+    "last_note_tonic": 0.8396739130434783,
+    "phrase_end_stable": 0.5068407960199005,
+    "n_pieces": 368
+  },
+  "v13_melody": {
+    "step_ratio": 0.625,
+    "avg_interval": 2.3015873015873014,
+    "direction_change": 0.7154566498316498,
+    "range_span": 12.5,
+    "onset_density": 1.7042214277015153,
+    "last_note_tonic": 0.125,
+    "phrase_end_stable": 0.15625,
+    "n_generated": 8,
+    "mask_recovery": {
+      "rec_pitch_harmonize": 0.6842406876790831,
+      "rec_rhythm_harmonize": 0.8080229226361032,
+      "rec_pitch_infill": 0.6926873037236428,
+      "rec_rhythm_infill": 0.8093315388066398,
+      "rec_pitch_random": 0.6904441453566622,
+      "rec_rhythm_random": 0.8001345895020189
+    },
+    "mask_recovery_cond": "和声条件=未知",
+    "mask_recovery_win": 64
+  },
+  "_config": {
+    "ckpt": "v13_melody.pt",
+    "melody_d": 384,
+    "melody_layers": 6,
+    "n": 8,
+    "bars": 16,
+    "seed": 0,
+    "temp": 0.9,
+    "out_dir": "data/generated/melody",
+    "ref": null,
+    "scored": false,
+    "with_harmony": false,
+    "out": "data/processed/melody_eval_v13.json",
+    "recovery_harmony": "auto",
+    "no_recovery": false,
+    "device": "cuda"
+  }
+}

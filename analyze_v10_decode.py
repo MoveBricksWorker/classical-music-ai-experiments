@@ -80,12 +80,15 @@ def main():
     ap.add_argument('--corpus', type=str, default='chorales')
     ap.add_argument('--d', type=int, default=480)
     ap.add_argument('--layers', type=int, default=8)
+    ap.add_argument('--heads', type=int, default=8, help='注意力头数（须与训练时一致）')
     ap.add_argument('--win', type=int, default=64)
     ap.add_argument('--stride', type=int, default=8)
     ap.add_argument('--n', type=int, default=48, help='评估窗口数')
     ap.add_argument('--candidates', type=int, default=8)
     ap.add_argument('--temp', type=float, default=1.0)
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--out', type=str, default='data/processed/v10_decode_experiment.json',
+                    help='产物路径（每次实验写自己的文件，别覆盖历史口径）')
     args = ap.parse_args()
 
     dev = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -94,7 +97,7 @@ def main():
     _, vl, _ = group_split(windows, 0.08)
     rng = random.Random(args.seed)
     sample = rng.sample(vl, min(args.n, len(vl)))
-    model = SATBDiffusion(d=args.d, h=args.layers, layers=args.layers, vocab=vocab).to(dev)
+    model = SATBDiffusion(d=args.d, h=args.heads, layers=args.layers, vocab=vocab).to(dev)
     model.load_state_dict(torch.load(ROOT / args.ckpt, map_location=dev, weights_only=True))
     model.eval()
 
@@ -147,11 +150,11 @@ def main():
         print(f'{tag:12s} {a:10.3f} {100*s["parallel_5"]/p:11.3f} '
               f'{100*s["parallel_8"]/p:12.3f} {100*s["spacing"]/p:12.3f} '
               f'{100*s["crossing"]/p:10.3f}')
-    json.dump({tag: {'pitch_acc': acc[tag][0] / max(acc[tag][1], 1), **dict(stats[tag])}
-               for tag in stats},
-              open(ROOT / 'data/processed/v10_decode_experiment.json', 'w',
-                   encoding='utf-8'), ensure_ascii=False, indent=2)
-    print('→ data/processed/v10_decode_experiment.json')
+    json.dump({'config': vars(args),
+               **{tag: {'pitch_acc': acc[tag][0] / max(acc[tag][1], 1), **dict(stats[tag])}
+                  for tag in stats}},
+              open(ROOT / args.out, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+    print(f'→ {args.out}')
 
 
 if __name__ == '__main__':

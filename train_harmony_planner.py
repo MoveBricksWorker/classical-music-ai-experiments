@@ -56,6 +56,19 @@ from model.satb_diffusion import SatbVocab
 FUNC_NAMES = {0: 'T', 1: 'PD', 2: 'D', 3: 'Sec', 4: 'Other', 5: 'REST'}
 ID2TYPE = {0: 'M', 1: 'm', 2: 'dim', 3: 'dom7', 4: 'aug', 5: 'm7', 6: 'dim7', 7: 'REST'}
 N_FUNC, N_TYPE, N_ROOT = 8, 10, 13        # 含未知占位 (7 / 9 / 12)
+N_FUNC_LABEL = len(FUNC_NAMES)            # 6 个真实功能标签 (0-5)
+N_TYPE_LABEL = len(ID2TYPE)               # 8 个真实类型标签 (0-7)
+
+
+def sample_plan_token(logits: torch.Tensor, n_labels: int, temp: float = 0.9) -> int:
+    """从 logits 的**前 n_labels 类**采样一个和弦标签。
+
+    未知占位（func=7 / type=9 / root=12）与不存在的 id（6/8）都要屏蔽：
+    它们不是任何和弦，喂给实现器只会得到训练时从未出现过的条件
+    （旧写法 `min(sample, N-2)` 会把它们夹成 6/8 这两个非法类别）。
+    """
+    lg = logits[:n_labels].clone() / max(temp, 1e-6)
+    return int(torch.multinomial(torch.softmax(lg, -1), 1))
 
 
 class HarmonyPlanner(nn.Module):

@@ -1,12 +1,10 @@
+# 当前代码实际 import 的依赖（2026-09-12 按全仓库 import 核对过一遍）。
+# 历史遗留的 pygame / pandas / matplotlib / seaborn / jupyter / tqdm / requests
+# 已无任何 .py 引用，移除；需要复现第一阶段 notebook 时再单独装。
 music21>=9.1.0
 numpy>=1.24.0
-pandas>=2.0.0
-matplotlib>=3.7.0
-seaborn>=0.12.0
-jupyter>=1.0.0
-tqdm>=4.65.0
-requests>=2.31.0
 torch>=2.0.0
 mido>=1.3.0
-pygame>=2.5.0
 scipy>=1.10.0
+# 云端（AutoDL）训练需要：SFTP 传权重、SSH 跑训练（见交接文档 §1）
+paramiko>=3.0.0
