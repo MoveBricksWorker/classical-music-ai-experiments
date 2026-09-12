@@ -63,7 +63,21 @@ def describe(tag, voices):
           f' / 间距>八度 {m["space"]}  (共 {m["pairs"]} 对)')
 
 
-for k in (1, 2, 3, 4):
-    print(f'=== 第 {k} 例 ===')
-    describe('生成', load(ROOT / f'data/generated/v10_gen_{k}.mid'))
-    describe('真值', load(ROOT / f'data/generated/v10_ref_{k}.mid'))
+import glob
+
+print('=== 整首四声部成品 (gen_satb.py 导出) ===')
+for g in sorted(glob.glob(str(ROOT / 'data/generated/satb_*_gen.mid'))):
+    r = g.replace('_gen.mid', '_ref.mid')
+    name = Path(g).stem.replace('satb_', '').replace('_gen', '')
+    print(f'--- {name} ---')
+    describe('生成', load(Path(g)))
+    if Path(r).exists():
+        describe('真值', load(Path(r)))
+
+print()
+print('=== 评估窗口样例 (v10_gen_*/v10_ref_*) ===')
+for k in (1, 2, 3):
+    if (ROOT / f'data/generated/v10_gen_{k}.mid').exists():
+        print(f'--- 第 {k} 例 ---')
+        describe('生成', load(ROOT / f'data/generated/v10_gen_{k}.mid'))
+        describe('真值', load(ROOT / f'data/generated/v10_ref_{k}.mid'))
