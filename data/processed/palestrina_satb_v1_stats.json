@@ -1,0 +1,21 @@
+{
+  "n_pieces": 1236,
+  "failed": 82,
+  "slices_total": 270506,
+  "notes_est": 925929,
+  "slices_per_piece_mean": 218.9,
+  "texture_dist": {
+    "polyphonic": 4174,
+    "imitative": 1323,
+    "mixed": 650,
+    "pedal": 903,
+    "chordal": 106
+  },
+  "figure_dist": {
+    "moving": 42923,
+    "block": 14278,
+    "sustained": 492,
+    "none": 30
+  },
+  "secs": 645.7
+}

@@ -1,0 +1,30 @@
+{
+  "n_pieces": 368,
+  "failed": 3,
+  "slices_total": 30095,
+  "slices_per_piece_mean": 81.8,
+  "texture_dist": {
+    "chordal": 1026,
+    "mixed": 391,
+    "pedal": 77,
+    "imitative": 102,
+    "polyphonic": 12
+  },
+  "figure_dist": {
+    "block": 3430,
+    "moving": 2259,
+    "arpeggio": 62,
+    "broken": 52,
+    "sustained": 23,
+    "alberti": 5,
+    "none": 4
+  },
+  "cadence_dist": {
+    "authentic": 1350,
+    "deceptive": 170,
+    "plagal": 46,
+    "half": 42
+  },
+  "coincidence_mean": 0.601,
+  "n_voices_mean": 4.0
+}

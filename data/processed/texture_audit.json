@@ -1,0 +1,425 @@
+{
+  "summary": {
+    "n_sampled": 45,
+    "n_valid": 45,
+    "n_invalid": 0,
+    "agreement": 0.289,
+    "by_label": {
+      "mixed": {
+        "n": 9,
+        "agree": 1,
+        "agreement": 0.111
+      },
+      "chordal": {
+        "n": 9,
+        "agree": 1,
+        "agreement": 0.111
+      },
+      "imitative": {
+        "n": 9,
+        "agree": 0,
+        "agreement": 0.0
+      },
+      "pedal": {
+        "n": 9,
+        "agree": 5,
+        "agreement": 0.556
+      },
+      "polyphonic": {
+        "n": 9,
+        "agree": 6,
+        "agreement": 0.667
+      }
+    },
+    "confusion": {
+      "mixed": {
+        "pedal": 5,
+        "polyphonic": 3,
+        "mixed": 1
+      },
+      "chordal": {
+        "polyphonic": 3,
+        "chordal": 1,
+        "mixed": 2,
+        "pedal": 3
+      },
+      "imitative": {
+        "mixed": 2,
+        "polyphonic": 4,
+        "chordal": 1,
+        "pedal": 2
+      },
+      "pedal": {
+        "pedal": 5,
+        "polyphonic": 4
+      },
+      "polyphonic": {
+        "polyphonic": 6,
+        "pedal": 3
+      }
+    },
+    "model": "qwen3.5:9b-q4_K_M"
+  },
+  "rows": [
+    {
+      "id": "chorale_347#2",
+      "rule": "mixed",
+      "llm": "pedal",
+      "agree": false,
+      "confidence": 0.9,
+      "reason": "The bass voice holds a long pedal point (E3/G2/F2) while the upper voices move independently in contrary motion."
+    },
+    {
+      "id": "chorale_182#1",
+      "rule": "chordal",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.85,
+      "reason": ""
+    },
+    {
+      "id": "chorale_365#4",
+      "rule": "imitative",
+      "llm": "mixed",
+      "agree": false,
+      "confidence": 0.7,
+      "reason": "The passage exhibits a mix of homophonic vertical motion in the middle section followed by distinct polyphonic interplay between voices later on."
+    },
+    {
+      "id": "chorale_211#3",
+      "rule": "pedal",
+      "llm": "pedal",
+      "agree": true,
+      "confidence": 0.95,
+      "reason": "The bass voice holds a long note (G4/G3/D4) while the upper voices move independently above it."
+    },
+    {
+      "id": "chorale_282#3",
+      "rule": "polyphonic",
+      "llm": "polyphonic",
+      "agree": true,
+      "confidence": 0.9,
+      "reason": "All four voices maintain independent rhythmic contours and melodic lines without a single voice dominating or holding a pedal point."
+    },
+    {
+      "id": "chorale_201#7",
+      "rule": "polyphonic",
+      "llm": "pedal",
+      "agree": false,
+      "confidence": 0.85,
+      "reason": "The bass line sustains notes (G3/A3/D4) for extended periods while the treble and alto voices move with independent rhythms."
+    },
+    {
+      "id": "chorale_220#1",
+      "rule": "mixed",
+      "llm": "pedal",
+      "agree": false,
+      "confidence": 0.95,
+      "reason": "The bass voice holds a long D note (with occasional pedal points) while the upper three voices move independently in contrary motion."
+    },
+    {
+      "id": "chorale_231#1",
+      "rule": "mixed",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.85,
+      "reason": "All four voices maintain independent rhythmic contours and melodic lines without clear imitation or block chord movement."
+    },
+    {
+      "id": "chorale_178#2",
+      "rule": "chordal",
+      "llm": "chordal",
+      "agree": true,
+      "confidence": 0.9,
+      "reason": "The upper three voices move together in tight rhythm (often unison/octave) while the bass provides harmonic support, characteristic of homophonic chorales."
+    },
+    {
+      "id": "chorale_109#1",
+      "rule": "imitative",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.85,
+      "reason": "The voices move with independent rhythms and distinct melodic lines without clear imitation or a sustained pedal point."
+    },
+    {
+      "id": "chorale_99#4",
+      "rule": "chordal",
+      "llm": "mixed",
+      "agree": false,
+      "confidence": 0.75,
+      "reason": "While there are moments of shared rhythm in the upper voices suggesting homophony, the bass moves independently and lower voices often have distinct rhythmic values against each other."
+    },
+    {
+      "id": "chorale_132#3",
+      "rule": "imitative",
+      "llm": "chordal",
+      "agree": false,
+      "confidence": 0.95,
+      "reason": "All four voices move together in the same rhythm (mostly quarter notes) forming block chords typical of a chorale setting."
+    },
+    {
+      "id": "chorale_227#0",
+      "rule": "chordal",
+      "llm": "pedal",
+      "agree": false,
+      "confidence": 0.95,
+      "reason": "The bass voice holds a long note (C3~ -> C4~ -> D3~ etc.) while the upper voices move independently above it."
+    },
+    {
+      "id": "chorale_132#12",
+      "rule": "polyphonic",
+      "llm": "polyphonic",
+      "agree": true,
+      "confidence": 0.9,
+      "reason": "All four voices have distinct rhythmic entries and independent melodic lines without a single voice holding a pedal point or moving in unison."
+    },
+    {
+      "id": "chorale_42#4",
+      "rule": "mixed",
+      "llm": "pedal",
+      "agree": false,
+      "confidence": 0.95,
+      "reason": "The bass maintains a sustained line (A2~ -> A2~ -> D3~ etc.) while the treble and alto voices change pitches frequently above it."
+    },
+    {
+      "id": "chorale_167#0",
+      "rule": "chordal",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.8,
+      "reason": "Voices move with independent rhythms and distinct melodic lines without clear imitation or a dominant pedal point."
+    },
+    {
+      "id": "chorale_240#1",
+      "rule": "chordal",
+      "llm": "mixed",
+      "agree": false,
+      "confidence": 0.75,
+      "reason": "The passage exhibits sections of homophonic block chords alternating with independent polyphonic motion and occasional unison/octave doubling."
+    },
+    {
+      "id": "chorale_295#3",
+      "rule": "imitative",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.8,
+      "reason": "All four voices maintain distinct rhythmic profiles and melodic independence throughout the phrase without imitation or a sustained pedal tone."
+    },
+    {
+      "id": "chorale_357#5",
+      "rule": "pedal",
+      "llm": "pedal",
+      "agree": true,
+      "confidence": 0.8,
+      "reason": "The bass voice holds a long note (Ab3/Bb3/G3) while the upper voices move independently above it."
+    },
+    {
+      "id": "chorale_149#1",
+      "rule": "pedal",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.7,
+      "reason": "All four voices have distinct rhythmic entries and independent melodic lines without a single voice dominating or holding a pedal point."
+    },
+    {
+      "id": "chorale_219#1",
+      "rule": "mixed",
+      "llm": "pedal",
+      "agree": false,
+      "confidence": 0.8,
+      "reason": "The bass line moves slowly with long durations (e.g., G3 held from 15.5 to 17.0) while the upper voices move rapidly."
+    },
+    {
+      "id": "chorale_282#2",
+      "rule": "polyphonic",
+      "llm": "polyphonic",
+      "agree": true,
+      "confidence": 0.95,
+      "reason": "Voices move with independent rhythms and distinct melodic lines without clear imitation or a sustained pedal point."
+    },
+    {
+      "id": "chorale_217#2",
+      "rule": "mixed",
+      "llm": "pedal",
+      "agree": false,
+      "confidence": 0.85,
+      "reason": "The bass voice sustains long notes (G3/F3) while the upper voices move rhythmically above it, characteristic of a pedal texture."
+    },
+    {
+      "id": "chorale_81#4",
+      "rule": "pedal",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.92,
+      "reason": "All four voices exhibit independent rhythmic motion and distinct melodic contours with no single voice dominating or holding a sustained note."
+    },
+    {
+      "id": "chorale_345#2",
+      "rule": "chordal",
+      "llm": "pedal",
+      "agree": false,
+      "confidence": 0.8,
+      "reason": "The bass voice holds a long note (Bb3/Eb3) for the majority of the passage while upper voices move independently."
+    },
+    {
+      "id": "chorale_69#7",
+      "rule": "pedal",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.8,
+      "reason": "All four voices exhibit independent rhythmic motion with no single voice holding a pedal point or moving in strict unison/octaves."
+    },
+    {
+      "id": "chorale_267#6",
+      "rule": "imitative",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.8,
+      "reason": "Voices move independently throughout the passage with no clear block chords, pedal points, or imitative motifs dominating."
+    },
+    {
+      "id": "chorale_12#4",
+      "rule": "imitative",
+      "llm": "pedal",
+      "agree": false,
+      "confidence": 0.95,
+      "reason": "The bass voice holds long notes (e.g., G3, Bb3) while the upper three voices move independently in a contrapuntal manner."
+    },
+    {
+      "id": "chorale_238#1",
+      "rule": "mixed",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.95,
+      "reason": "All four voices maintain independent rhythmic contours and melodic lines without clear imitation or block chord movement."
+    },
+    {
+      "id": "chorale_30#0",
+      "rule": "chordal",
+      "llm": "pedal",
+      "agree": false,
+      "confidence": 0.85,
+      "reason": "The bass voice sustains long notes (C4, F4) while the soprano and alto voices move freely above them."
+    },
+    {
+      "id": "chorale_193#0",
+      "rule": "pedal",
+      "llm": "pedal",
+      "agree": true,
+      "confidence": 0.85,
+      "reason": "The bass voice holds a long note (C3/Bb3/D3) while the upper voices move independently above it."
+    },
+    {
+      "id": "chorale_193#6",
+      "rule": "pedal",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.8,
+      "reason": "All four voices have independent rhythmic contours and distinct melodic lines without clear imitation or a dominant pedal point."
+    },
+    {
+      "id": "chorale_193#1",
+      "rule": "pedal",
+      "llm": "pedal",
+      "agree": true,
+      "confidence": 0.75,
+      "reason": "The bass voice sustains notes (C3/D3/Eb3/Bb2) for extended periods while the treble and alto voices move freely above."
+    },
+    {
+      "id": "chorale_132#0",
+      "rule": "polyphonic",
+      "llm": "polyphonic",
+      "agree": true,
+      "confidence": 0.9,
+      "reason": "Voices enter at different times with independent melodic lines and no clear point of imitation or pedal structure."
+    },
+    {
+      "id": "chorale_132#7",
+      "rule": "mixed",
+      "llm": "mixed",
+      "agree": true,
+      "confidence": 0.85,
+      "reason": "The passage features moments where voices move together rhythmically alongside independent contrapuntal lines and a sustained bass line characteristic of chorales."
+    },
+    {
+      "id": "chorale_131#5",
+      "rule": "polyphonic",
+      "llm": "polyphonic",
+      "agree": true,
+      "confidence": 0.9,
+      "reason": "All four voices maintain distinct rhythmic profiles with independent melodic motion throughout the excerpt without a dominant pedal or homophonic block."
+    },
+    {
+      "id": "chorale_42#0",
+      "rule": "imitative",
+      "llm": "pedal",
+      "agree": false,
+      "confidence": 0.9,
+      "reason": "The bass voice holds a long note (F3/F2) while the upper three voices move independently above it."
+    },
+    {
+      "id": "chorale_55#2",
+      "rule": "imitative",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.85,
+      "reason": "All four voices maintain independent rhythmic contours and melodic lines without clear imitation or a dominant pedal point."
+    },
+    {
+      "id": "chorale_201#10",
+      "rule": "polyphonic",
+      "llm": "pedal",
+      "agree": false,
+      "confidence": 0.95,
+      "reason": "The bass voice sustains long notes (G3/F3/G3) throughout the passage while the soprano and alto move freely above."
+    },
+    {
+      "id": "chorale_194#3",
+      "rule": "pedal",
+      "llm": "pedal",
+      "agree": true,
+      "confidence": 0.9,
+      "reason": "The bass voice holds a long note (G3/F4) while the upper voices move independently above it."
+    },
+    {
+      "id": "chorale_132#8",
+      "rule": "polyphonic",
+      "llm": "polyphonic",
+      "agree": true,
+      "confidence": 0.85,
+      "reason": "All four voices exhibit independent rhythmic contours and melodic lines without a single voice dominating or holding a pedal point."
+    },
+    {
+      "id": "chorale_125#4",
+      "rule": "chordal",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.9,
+      "reason": "The passage features distinct counterpoint where each voice moves with its own rhythm and melodic direction throughout the excerpt."
+    },
+    {
+      "id": "chorale_115#6",
+      "rule": "polyphonic",
+      "llm": "pedal",
+      "agree": false,
+      "confidence": 0.9,
+      "reason": "The bass voice holds a long note (E6/F6/G6) while the upper voices move independently above it."
+    },
+    {
+      "id": "chorale_37#3",
+      "rule": "mixed",
+      "llm": "polyphonic",
+      "agree": false,
+      "confidence": 0.85,
+      "reason": "All four voices have independent rhythmic contours and distinct melodic lines without a single dominant pedal point or block chord movement."
+    },
+    {
+      "id": "chorale_243#0",
+      "rule": "imitative",
+      "llm": "mixed",
+      "agree": false,
+      "confidence": 0.8,
+      "reason": "The passage exhibits shifting textures including moments of homophonic motion, independent counterpoint in the middle voices, and brief pedal-like stability."
+    }
+  ]
+}
