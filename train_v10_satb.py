@@ -63,6 +63,7 @@ RHYTHM_VALUES = [0.125, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 4.0]   # = MELODY_RHYTHM
 HOLD = 8                       # 延音（不重新起音）
 N_RHYTHM = 9                   # 0-7 时值 + 8 HOLD；MASK 用 id 9（见 SatbDiffusion）
 CADENCE_ID = {'authentic': 1, 'half': 2, 'deceptive': 3, 'plagal': 4}
+COND_KEYS = ('func', 'type', 'root', 'pos_bin', 'toend_bin', 'phrase_bin', 'cadence', 'style')
 STYLE_ID = {'chorale': 0, 'palestrina': 1}
 TPB = 480
 
@@ -397,6 +398,10 @@ def main():
     ap.add_argument('--val-ratio', type=float, default=0.08)
     ap.add_argument('--out', type=str, default='v10_satb.pt')
     ap.add_argument('--tag', type=str, default='v10')
+    ap.add_argument('--patience', type=int, default=0,
+                    help='验证分数连续 N 次不提升就早停 (0=关闭)')
+    ap.add_argument('--eval-n', type=int, default=48, help='评估用窗口数')
+    ap.add_argument('--eval-only', action='store_true', help='只评估给定 ckpt')
     ap.add_argument('--export-only', action='store_true')
     ap.add_argument('--ckpt', type=str, default=None)
     ap.add_argument('--n-export', type=int, default=3)
@@ -405,6 +410,24 @@ def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     vocab = SatbVocab()
     torch.manual_seed(42); random.seed(42); np.random.seed(42)
+
+    if args.eval_only:
+        windows = load_corpus(args.corpus, vocab, args.win, args.stride)
+        _, vl, _ = group_split(windows, args.val_ratio)
+        model = SATBDiffusion(d=args.d, h=args.heads, layers=args.layers, vocab=vocab).to(device)
+        model.load_state_dict(torch.load(ROOT / args.ckpt, map_location=device, weights_only=True))
+        rec = eval_recovery(model, DataLoader(WindowDataset(vl), batch_size=args.batch),
+                            device)
+        harm = eval_harmonize(model, vl, device, n=args.eval_n)
+        print(f'检查点 {args.ckpt} | 验证窗口 {len(vl)}')
+        for k in ('harm_pitch_acc_masked', 'harm_pitch_acc_chorale', 'harm_rhythm_acc',
+                  'parallel_5_per100', 'ref_parallel_5_per100', 'crossing_per100',
+                  'ref_crossing_per100'):
+            if k in harm:
+                print(f'  {k:26s} {harm[k]:.3f}')
+        print(f'  逐声部 {harm["per_voice_pitch_acc"]}')
+        print('  ' + ' '.join(f'{k}={v:.3f}' for k, v in rec.items()))
+        return
 
     if args.export_only:
         windows = load_corpus(args.corpus, vocab, args.win, args.stride)
@@ -431,6 +454,7 @@ def main():
     keys = WindowDataset.KEYS
     t0 = time.time()
     best = -1.0
+    no_gain = 0
     hist = []
     for ep in range(args.epochs):
         model.train()
@@ -447,7 +471,7 @@ def main():
         sched.step()
         if (ep + 1) % max(1, args.epochs // 10) == 0 or ep == args.epochs - 1:
             rec = eval_recovery(model, vl, device)
-            harm = eval_harmonize(model, vl_w, device, n=24)
+            harm = eval_harmonize(model, vl_w, device, n=args.eval_n)
             score = (harm.get('harm_pitch_acc_chorale', harm['harm_pitch_acc_masked'])
                      + 0.3 * rec['rec_pitch_random'])
             line = (f'Ep{ep + 1:4d} | loss {tot / max(nb, 1):.4f} | '
@@ -459,10 +483,16 @@ def main():
                     f'{time.time() - t0:.0f}s')
             print(line, flush=True)
             hist.append({'epoch': ep + 1, 'loss': tot / max(nb, 1), **rec, **harm})
-            if score > best:
+            if score > best + 1e-4:
                 best = score
+                no_gain = 0
                 torch.save(model.state_dict(), str(ROOT / args.out))
                 print(f'   ↳ 保存检查点 (score {score:.3f})', flush=True)
+            else:
+                no_gain += 1
+                if args.patience and no_gain >= args.patience:
+                    print(f'   ↳ 早停: 连续 {no_gain} 次未提升 (best {best:.3f})', flush=True)
+                    break
 
     report = {'config': vars(args), 'n_params': n_par, 'n_train': len(tr_w), 'n_val': len(vl_w),
               'history': hist, 'best_score': best, 'seconds': round(time.time() - t0, 1)}
