@@ -172,15 +172,28 @@ class WindowDataset(Dataset):
 
 
 def load_corpus(kind: str, vocab: SatbVocab, win: int, stride: int,
-                transpose_aug: int = 0):
-    pieces = []
+                transpose_aug: int = 0, palestrina_max: int = 0, seed: int = 0):
+    """kind: chorales / palestrina / both。
+
+    `palestrina_max` > 0 时, 把 Palestrina 窗口随机下采样到该数量 —— 用于做
+    **平衡混合**实验（此前 88% 窗口来自 Palestrina, 把"有解"的配和声任务稀释了）。
+    """
+    cho, pal = [], []
     if kind in ('chorales', 'both'):
-        pieces += json.load(open(DATA / 'chorales_satb_v2.json', encoding='utf-8'))
+        cho = json.load(open(DATA / 'chorales_satb_v2.json', encoding='utf-8'))
     if kind in ('palestrina', 'both'):
         with gzip.open(DATA / 'palestrina_satb_v1.json.gz', 'rt', encoding='utf-8') as fh:
-            pieces += json.load(fh)
-    print(f'语料 {kind}: {len(pieces)} 首, 切片 {sum(len(p["slices"]) for p in pieces):,}')
-    return build_windows(pieces, vocab, win, stride, transpose_aug=transpose_aug)
+            pal = json.load(fh)
+    n_slices = sum(len(p['slices']) for p in cho) + sum(len(p['slices']) for p in pal)
+    print(f'语料 {kind}: 众赞歌 {len(cho)} 首 / Palestrina {len(pal)} 首, 切片 {n_slices:,}')
+    w_cho = build_windows(cho, vocab, win, stride, transpose_aug=transpose_aug)
+    w_pal = build_windows(pal, vocab, win, stride, transpose_aug=transpose_aug)
+    if palestrina_max and len(w_pal) > palestrina_max:
+        random.Random(seed).shuffle(w_pal)
+        w_pal = w_pal[:palestrina_max]
+        print(f'  Palestrina 窗口下采样 → {len(w_pal)}')
+    print(f'  窗口: 众赞歌 {len(w_cho)} + Palestrina {len(w_pal)}')
+    return w_cho + w_pal
 
 
 def group_split(windows, val_ratio=0.08, seed=42):
@@ -398,6 +411,10 @@ def main():
     ap.add_argument('--val-ratio', type=float, default=0.08)
     ap.add_argument('--out', type=str, default='v10_satb.pt')
     ap.add_argument('--tag', type=str, default='v10')
+    ap.add_argument('--palestrina-max', type=int, default=0,
+                    help='>0 时把 Palestrina 窗口下采样到该数量（平衡混合实验）')
+    ap.add_argument('--vl-weight', type=float, default=0.0,
+                    help='声部进行（平行五/八度）辅助损失权重')
     ap.add_argument('--patience', type=int, default=0,
                     help='验证分数连续 N 次不提升就早停 (0=关闭)')
     ap.add_argument('--eval-n', type=int, default=48, help='评估用窗口数')
@@ -439,7 +456,8 @@ def main():
         return
 
     windows = load_corpus(args.corpus, vocab, args.win, args.stride,
-                          transpose_aug=args.aug_transpose)
+                          transpose_aug=args.aug_transpose,
+                          palestrina_max=args.palestrina_max)
     tr_w, vl_w, val_ids = group_split(windows, args.val_ratio)
     print(f'窗口: 训练 {len(tr_w)} / 验证 {len(vl_w)} ({len(val_ids)} 首曲) | '
           f'序列长 {args.win} | 移调增广 ±{args.aug_transpose}')
@@ -463,7 +481,8 @@ def main():
             cond = {k: b[keys.index(k)].to(device) for k in keys}
             pitch = cond.pop('pitch'); rhythm = cond.pop('rhythm')
             opt.zero_grad()
-            loss, lp, lr_, n_tgt = model.training_loss(pitch, rhythm, cond, mode='mixed')
+            loss, lp, lr_, n_tgt = model.training_loss(pitch, rhythm, cond, mode='mixed',
+                                                       vl_weight=args.vl_weight)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
@@ -475,6 +494,7 @@ def main():
             score = (harm.get('harm_pitch_acc_chorale', harm['harm_pitch_acc_masked'])
                      + 0.3 * rec['rec_pitch_random'])
             line = (f'Ep{ep + 1:4d} | loss {tot / max(nb, 1):.4f} | '
+                    f'vl {args.vl_weight:g} | '
                     f'rec(harm/infill/rand) {rec["rec_pitch_harmonize"]:.3f}/'
                     f'{rec["rec_pitch_infill"]:.3f}/{rec["rec_pitch_random"]:.3f} | '
                     f'配和声(众赞歌) 音高 {harm.get("harm_pitch_acc_chorale", 0):.3f} '

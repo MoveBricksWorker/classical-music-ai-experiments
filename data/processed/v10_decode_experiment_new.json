@@ -1,0 +1,32 @@
+{
+  "argmax": {
+    "pitch_acc": 0.8664279513888888,
+    "parallel_5": 22,
+    "parallel_8": 57,
+    "crossing": 82,
+    "spacing": 108,
+    "overlap": 260,
+    "range_violation": 37,
+    "pairs": 9072
+  },
+  "best_of_k": {
+    "pitch_acc": 0.8612196180555556,
+    "parallel_5": 14,
+    "parallel_8": 40,
+    "crossing": 79,
+    "spacing": 114,
+    "overlap": 256,
+    "range_violation": 39,
+    "pairs": 9068
+  },
+  "random_cand": {
+    "pitch_acc": 0.8595920138888888,
+    "parallel_5": 20,
+    "parallel_8": 74,
+    "crossing": 83,
+    "spacing": 115,
+    "overlap": 276,
+    "range_violation": 39,
+    "pairs": 9072
+  }
+}

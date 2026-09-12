@@ -160,6 +160,73 @@ class SATBDiffusion(nn.Module):
         rl = torch.stack([h(o) for h in self.rhythm_heads], dim=1)   # [B, V, T, R]
         return pl, rl
 
+
+    # ─────────────────────────────────────────────────────────────
+    # 声部进行辅助损失（可微, 近似）
+    # ─────────────────────────────────────────────────────────────
+    def _pc_repr(self, pl, pitch_true, known):
+        """把 [B,V,T,P] 的音高 logits 折成 [B,V,T,12] 的音级分布。
+
+        已知位置用真值 one-hot（梯度不从那里回传），待生成位置用模型分布
+        —— 这样惩罚只作用在模型真正要负责的音上。
+        """
+        B, V, T, P = pl.shape
+        probs = F.softmax(pl, dim=-1)                     # [B,V,T,P]
+        pc = torch.zeros(B, V, T, 12, device=pl.device, dtype=probs.dtype)
+        n = self.vocab.n_pitch
+        for k in range(n):                                 # 绝对音高 → 音级（53 次索引, 开销可忽略）
+            pc[..., k % 12] += probs[..., k]
+        # 已知位置: 用真值 one-hot（梯度不从已知位置回传）
+        if known is not None:
+            n_pitch = self.vocab.n_pitch
+            true_pc = pitch_true.clamp(0, n_pitch - 1) % 12
+            valid = known & (pitch_true < n_pitch)
+            pc_true = torch.zeros_like(pc)
+            flat = pc_true.view(-1, 12)
+            fv = (true_pc.view(-1) % 12)
+            mask = valid.view(-1)
+            flat[torch.arange(flat.shape[0], device=pl.device)[mask], fv[mask]] = 1.0
+            pc = torch.where(known.unsqueeze(-1), pc_true, pc)
+            # 休止/无效位置 → 全零（不参与）
+            pc = pc * (pitch_true < n).unsqueeze(-1).to(pc.dtype)
+        return pc
+
+    def voiceleading_penalty(self, pl, pitch_true, known, min_mass: float = 0.2):
+        """近似可微的平行五/八度惩罚。
+
+        对每对相邻声部与每对相邻切片, 用**边缘分布**估计:
+            P(前后都是纯五/纯八) × P(两声部同向移动)
+        在独立假设下这个量正比于"平行五/八度"事件的发生概率 —— 直接压它,
+        等于让模型学会"别写平行五/八度"（比事后修正是更根本的做法）。
+        只在两侧都有足够"实音质量"时计（voice 有休止/未定则跳过）。
+        """
+        pc = self._pc_repr(pl, pitch_true, known)           # [B,V,T,12]
+        B, V, T, _ = pc.shape
+        if T < 2:
+            return torch.zeros((), device=pl.device)
+        idx = torch.arange(12, device=pl.device)
+        up_mask = (idx[None, :, None] < idx[None, None, :]).to(pc.dtype)
+        dn_mask = (idx[None, :, None] > idx[None, None, :]).to(pc.dtype)
+        total = torch.zeros((), device=pl.device)
+        npair = 0
+        for v in range(V - 1):
+            A, C = pc[:, v], pc[:, v + 1]                   # [B,T,12]
+            mass = (A.sum(-1) * C.sum(-1))                  # [B,T] 两侧都有音的概率质量
+            Cshift = torch.stack([C.roll(-k, dims=-1) for k in range(12)], dim=-1)  # [B,T,12,12]
+            ic = (A.unsqueeze(-1) * Cshift).sum(-2)         # [B,T,12] 音程级分布
+            w = (mass[:, :-1] * mass[:, 1:]).clamp(min=0)
+            good = (w > min_mass).to(pc.dtype)
+            p5 = (ic[:, :-1, 7] * ic[:, 1:, 7]) * good
+            p8 = (ic[:, :-1, 0] * ic[:, 1:, 0]) * good
+            MA = A[:, :-1].unsqueeze(-1) * A[:, 1:].unsqueeze(-2)   # [B,T-1,12,12]
+            MC = C[:, :-1].unsqueeze(-1) * C[:, 1:].unsqueeze(-2)
+            upA = (MA * up_mask).sum((-1, -2)); dnA = (MA * dn_mask).sum((-1, -2))
+            upC = (MC * up_mask).sum((-1, -2)); dnC = (MC * dn_mask).sum((-1, -2))
+            same = upA * upC + dnA * dnC
+            total = total + ((p5 + p8) * same * good).mean()
+            npair += 1
+        return total / max(npair, 1)
+
     # ─────────────────────────────────────────────────────────────
     def sample_mask(self, B: int, V: int, T: int, mode: str, dev) -> torch.Tensor:
         """known [B, V, T]（True = 已知）。mode: harmonize/infill/random/mixed。"""
@@ -187,7 +254,7 @@ class SATBDiffusion(nn.Module):
         return known
 
     def training_loss(self, pitch, rhythm, cond, mode='mixed', masks=None,
-                      rhythm_weight: float = 0.3):
+                      rhythm_weight: float = 0.3, vl_weight: float = 0.0):
         known = masks if masks is not None else self.sample_mask(
             pitch.shape[0], pitch.shape[1], pitch.shape[2], mode, pitch.device)
         target = ~known
@@ -196,7 +263,13 @@ class SATBDiffusion(nn.Module):
         pl, rl = self.forward(p_in, r_in, known, cond)
         lp = F.cross_entropy(pl[target], pitch[target])
         lr = F.cross_entropy(rl[target], rhythm[target])
-        return lp + rhythm_weight * lr, lp.item(), lr.item(), int(target.sum().item())
+        loss = lp + rhythm_weight * lr
+        vl = 0.0
+        if vl_weight > 0:
+            pen = self.voiceleading_penalty(pl, pitch, known)
+            loss = loss + vl_weight * pen
+            vl = float(pen.item())
+        return loss, lp.item(), lr.item(), int(target.sum().item())
 
     # ─────────────────────────────────────────────────────────────
     @torch.no_grad()
