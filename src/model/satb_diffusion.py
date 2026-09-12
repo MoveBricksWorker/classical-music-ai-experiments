@@ -201,8 +201,19 @@ class SATBDiffusion(nn.Module):
     # ─────────────────────────────────────────────────────────────
     @torch.no_grad()
     def generate(self, pitch, rhythm, known, cond, steps: int = 16, temp: float = 1.0,
-                 remask_steps: int = 4, remask_ratio: float = 0.2, seed: int | None = None):
-        """只生成 known=False 的单元；known=True 保持给定值（infilling 解码）。"""
+                 remask_steps: int = 4, remask_ratio: float = 0.2, seed: int | None = None,
+                 argmax: bool = False):
+        """只生成 known=False 的单元；known=True 保持给定值（infilling 解码）。
+
+        ⚠️ 实测（众赞歌配和声，只给 Soprano）：
+            单步 + argmax  0.622  ← 与训练用法一致（一次预测全部掩码位）
+            贪心 2/4/8 步  0.484 / 0.348 / 0.230
+            采样 16 步     0.139
+        **步数越多越差**：训练时 `known=True` 永远是**真值**，而迭代解码把自己的
+        预测标成 known 喂回去 —— 训练/推理不一致（与 v5 条件块 bug 同源）。
+        因此本模型的推荐解码是 `steps=1, argmax=True`；若要迭代精修，需先把
+        "预测值"与"真值"用不同的 flag 区分（见 09 报告）。
+        """
         self.eval()
         if seed is not None:
             torch.manual_seed(seed)
@@ -248,8 +259,12 @@ class SATBDiffusion(nn.Module):
             idx = flat.topk(min(k, int((flat > -1).sum().item())), dim=1).indices
             for b in range(B):
                 vv, tt = idx[b] // T, idx[b] % T
-                p_in[b, vv, tt] = torch.multinomial(F.softmax(pl_t[b, vv, tt], -1), 1).squeeze(-1)
-                r_in[b, vv, tt] = torch.multinomial(F.softmax(rl_t[b, vv, tt], -1), 1).squeeze(-1)
+                if argmax:
+                    p_in[b, vv, tt] = pl_t[b, vv, tt].argmax(-1)
+                    r_in[b, vv, tt] = rl_t[b, vv, tt].argmax(-1)
+                else:
+                    p_in[b, vv, tt] = torch.multinomial(F.softmax(pl_t[b, vv, tt], -1), 1).squeeze(-1)
+                    r_in[b, vv, tt] = torch.multinomial(F.softmax(rl_t[b, vv, tt], -1), 1).squeeze(-1)
             prev = counts[s]
         return p_in, r_in
 

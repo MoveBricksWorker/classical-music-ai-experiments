@@ -205,15 +205,20 @@ def cond_of(batch, device, keys):
 @torch.no_grad()
 def eval_harmonize(model, windows, device, n=48, seed=0,
                    keep_voices=(0,)):
-    """只给 keep_voices（默认 Soprano），生成其余声部 → 准确率 + 声部进行指标。"""
+    """只给 keep_voices（默认 Soprano），生成其余声部 → 准确率 + 声部进行指标。
+
+    分 **chorale（有功能和声条件）** 与 **palestrina（自由对位）** 两个口径报告：
+    混在一起会稀释信号（后者本质更难）。声部进行指标配**同一批窗口的真值**作基线。
+    """
     model.eval()
     rng = random.Random(seed)
     sample = windows if len(windows) <= n else rng.sample(windows, n)
-    acc_p = acc_p_all = acc_r = tot_p = tot_pinch = tot_r = 0
+    acc = {0: [0, 0], 1: [0, 0]}          # style → [pitch 命中, 实音数]
+    acc_r = {0: [0, 0], 1: [0, 0]}
     gen_metrics, ref_metrics = Counter(), Counter()
-    per_voice = {v: [0, 0, 0, 0] for v in range(N_VOICES)}   # [pitch命中, 实音数, 节奏命中, 总数]
+    per_voice = {v: [0, 0] for v in range(N_VOICES)}
     for w in sample:
-        B = 1
+        style = int(w['style'][0].item())
         pitch = w['pitch'][None].to(device)
         rhythm = w['rhythm'][None].to(device)
         known = torch.zeros_like(pitch, dtype=torch.bool)
@@ -221,23 +226,18 @@ def eval_harmonize(model, windows, device, n=48, seed=0,
             known[:, v] = True
         cond = {k: w[k][None].to(device) for k in
                 ('func', 'type', 'root', 'pos_bin', 'toend_bin', 'phrase_bin', 'cadence', 'style')}
-        gp, gr = model.generate(pitch, rhythm, known, cond, steps=16, temp=0.85,
-                                remask_steps=4, remask_ratio=0.2, seed=rng.randint(0, 10 ** 6))
+        # 单步 argmax = 与训练一致的用法 (实测 0.62 vs 迭代 16 步 0.14)
+        gp, gr = model.generate(pitch, rhythm, known, cond, steps=1, argmax=True)
         tgt_p, tgt_r = pitch[0], rhythm[0]
         for v in range(N_VOICES):
             if v in keep_voices:
                 continue
             real = (tgt_p[v] < model.vocab.n_pitch)
-            hit_p = ((gp[0, v] == tgt_p[v]) & real).sum().item()
-            per_voice[v][0] += hit_p
-            per_voice[v][1] += int(real.sum().item())
-            per_voice[v][2] += (gr[0, v] == tgt_r[v]).sum().item()
-            per_voice[v][3] += tgt_p[v].numel()
-            acc_p += hit_p
-            tot_pinch += int(real.sum().item())
-            acc_r += (gr[0, v] == tgt_r[v]).sum().item()
-            tot_r += tgt_p[v].numel()
-        acc_p_all += (gp[0] == tgt_p).sum().item()
+            hit = ((gp[0, v] == tgt_p[v]) & real).sum().item()
+            acc[style][0] += hit; acc[style][1] += int(real.sum().item())
+            acc_r[style][0] += (gr[0, v] == tgt_r[v]).sum().item()
+            acc_r[style][1] += tgt_p[v].numel()
+            per_voice[v][0] += hit; per_voice[v][1] += int(real.sum().item())
         # 声部进行指标（生成 vs 真值，同一批窗口）
         g_midi = torch.where(gp[0] < model.vocab.n_pitch, gp[0] + model.vocab.lo,
                              torch.full_like(gp[0], -1))
@@ -249,10 +249,10 @@ def eval_harmonize(model, windows, device, n=48, seed=0,
             ref_metrics[k] += v
     pairs = max(gen_metrics['pairs'], 1)
     ref_pairs = max(ref_metrics['pairs'], 1)
-    return {
-        'harm_pitch_acc_masked': acc_p / max(tot_pinch, 1),
-        'harm_pitch_acc_all': acc_p_all / max(len(sample) * N_VOICES * sample[0]['pitch'].shape[1], 1),
-        'harm_rhythm_acc': acc_r / max(tot_r, 1),
+    out = {
+        'harm_pitch_acc_masked': (acc[0][0] + acc[1][0]) / max(acc[0][1] + acc[1][1], 1),
+        'harm_rhythm_acc': (acc_r[0][0] + acc_r[1][0]) / max(acc_r[0][1] + acc_r[1][1], 1),
+        'n_eval_windows': len(sample),
         'per_voice_pitch_acc': {VOICE_NAMES[v]: per_voice[v][0] / max(per_voice[v][1], 1)
                                 for v in range(N_VOICES) if per_voice[v][1]},
         'parallel_5_per100': 100.0 * gen_metrics['parallel_5'] / pairs,
@@ -266,6 +266,11 @@ def eval_harmonize(model, windows, device, n=48, seed=0,
         'ref_spacing_per100': 100.0 * ref_metrics['spacing'] / ref_pairs,
         'ref_range_viol_per100': 100.0 * ref_metrics['range_violation'] / ref_pairs,
     }
+    for sid, name in ((0, 'chorale'), (1, 'palestrina')):
+        if acc[sid][1]:
+            out[f'harm_pitch_acc_{name}'] = acc[sid][0] / acc[sid][1]
+            out[f'harm_rhythm_acc_{name}'] = acc_r[sid][0] / max(acc_r[sid][1], 1)
+    return out
 
 
 @torch.no_grad()
@@ -361,8 +366,7 @@ def export_samples(model, windows, device, out_dir: Path, n=3, seed=0, bpm=76):
         known[:, 0] = True                                # 只给 Soprano
         cond = {k: w[k][None].to(device) for k in
                 ('func', 'type', 'root', 'pos_bin', 'toend_bin', 'phrase_bin', 'cadence', 'style')}
-        gp, gr = model.generate(pitch, rhythm, known, cond, steps=16, temp=0.85,
-                                seed=rng.randint(0, 10 ** 6))
+        gp, gr = model.generate(pitch, rhythm, known, cond, steps=1, argmax=True)
         # 真值版（Soprano 用真值，其余声部用真值 — 即真实巴赫）
         offs = w['offs']
         write_satb_midi(out_dir / f'v10_gen_{i + 1}.mid', gp[0].cpu(), gr[0].cpu(),
@@ -444,12 +448,13 @@ def main():
         if (ep + 1) % max(1, args.epochs // 10) == 0 or ep == args.epochs - 1:
             rec = eval_recovery(model, vl, device)
             harm = eval_harmonize(model, vl_w, device, n=24)
-            score = harm['harm_pitch_acc_all'] + 0.3 * rec['rec_pitch_random']
+            score = (harm.get('harm_pitch_acc_chorale', harm['harm_pitch_acc_masked'])
+                     + 0.3 * rec['rec_pitch_random'])
             line = (f'Ep{ep + 1:4d} | loss {tot / max(nb, 1):.4f} | '
                     f'rec(harm/infill/rand) {rec["rec_pitch_harmonize"]:.3f}/'
                     f'{rec["rec_pitch_infill"]:.3f}/{rec["rec_pitch_random"]:.3f} | '
-                    f'配和声: 音高 {harm["harm_pitch_acc_masked"]:.3f} '
-                    f'节奏 {harm["harm_rhythm_acc"]:.3f} | '
+                    f'配和声(众赞歌) 音高 {harm.get("harm_pitch_acc_chorale", 0):.3f} '
+                    f'节奏 {harm.get("harm_rhythm_acc_chorale", 0):.3f} | '
                     f'平行五 {harm["parallel_5_per100"]:.1f} vs 真值 {harm["ref_parallel_5_per100"]:.1f} | '
                     f'{time.time() - t0:.0f}s')
             print(line, flush=True)
